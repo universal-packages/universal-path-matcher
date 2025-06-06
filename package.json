@@ -1,0 +1,52 @@
+{
+  "name": "@universal-packages/path-matcher",
+  "version": "0.0.0",
+  "description": "Simple path matcher for registered paths",
+  "author": "David De Anda <david@universal-packages.com> (https://github.com/universal-packages)",
+  "license": "MIT",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "module",
+  "repository": "git@github.com:universal-packages/universal-path-matcher.git",
+  "scripts": {
+    "build": "tsc --p tsconfig.dis.json",
+    "test": "tsx ./src/tests.test.ts",
+    "test:coverage": "c8 --reporter=text --reporter=json --reporter=html --reporter=lcov --reporter=text-summary tsx ./src/tests.test.ts",
+    "test:watch": "tsx watch ./src/tests.test.ts",
+    "format": "prettier --write",
+    "format:all": "npm run format \"./**/*.{ts,tsx,js,jsx,json}\"",
+    "update-universal-dependencies": "umaintenance update-universal-dependencies",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@trivago/prettier-plugin-sort-imports": "^5.2.2",
+    "@types/node": "^22.15.17",
+    "@universal-packages/maintenance": "^1.7.4",
+    "@universal-packages/tsconfig": "^1.0.2",
+    "c8": "^10.1.3",
+    "husky": "^9.1.7",
+    "prettier": "^3.5.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  },
+  "prettier": {
+    "semi": false,
+    "singleQuote": true,
+    "printWidth": 180,
+    "trailingComma": "none",
+    "plugins": [
+      "@trivago/prettier-plugin-sort-imports"
+    ],
+    "importOrder": [
+      "^[./]"
+    ],
+    "importOrderSeparation": true,
+    "importOrderSortSpecifiers": true,
+    "importOrderParserPlugins": [
+      "typescript",
+      "jsx",
+      "classProperties",
+      "decorators-legacy"
+    ]
+  }
+}
