@@ -46,6 +46,59 @@ Creates a new PathMatcher instance with optional configuration.
 - **`useParams`**: `boolean` (default: `false`)
   Enable parameter extraction with `:paramName` syntax.
 
+### Getters
+
+#### targetsCount
+
+```ts
+get targetsCount(): number
+```
+
+Returns the total number of registered targets across all matchers.
+
+```ts
+const matcher = new PathMatcher<string>()
+matcher.addTarget('api/users', 'handler1')
+matcher.addTarget('api/users', 'handler2')
+matcher.addTarget('api/posts', 'handler3')
+
+console.log(matcher.targetsCount) // 3
+```
+
+#### targets
+
+```ts
+get targets(): PathTarget[]
+```
+
+Returns an array of all registered targets in the order they were added (respecting prepend operations).
+
+```ts
+const matcher = new PathMatcher<string>()
+matcher.addTarget('api/users', 'handler1')
+matcher.prependTarget('api/users', 'handler0')
+matcher.addTarget('api/posts', 'handler2')
+
+console.log(matcher.targets) // ['handler0', 'handler1', 'handler2']
+```
+
+#### matchers
+
+```ts
+get matchers(): string[]
+```
+
+Returns an array of all unique registered matcher patterns.
+
+```ts
+const matcher = new PathMatcher<string>()
+matcher.addTarget('api/users', 'handler1')
+matcher.addTarget('api/users', 'handler2')
+matcher.addTarget('api/posts', 'handler3')
+
+console.log(matcher.matchers) // ['api/users', 'api/posts']
+```
+
 ### Instance Methods
 
 #### addTarget
@@ -200,6 +253,25 @@ console.log(results[0])
 // { matcher: 'user/profile', target: 'profile-handler' }
 ```
 
+#### hasMatchers
+
+```ts
+hasMatchers(matchers: string[]): boolean
+```
+
+Checks if targets have been registered for all provided matcher patterns.
+
+```ts
+const matcher = new PathMatcher<string>()
+matcher.addTarget('api/users', 'handler1')
+matcher.addTarget('api/posts', 'handler2')
+
+console.log(matcher.hasMatchers(['api/users'])) // true
+console.log(matcher.hasMatchers(['api/users', 'api/posts'])) // true
+console.log(matcher.hasMatchers(['api/users', 'api/comments'])) // false
+console.log(matcher.hasMatchers([])) // true (empty array always returns true)
+```
+
 ## Wildcard Matching
 
 Enable wildcard support to use flexible pattern matching:
@@ -302,6 +374,44 @@ const allApiResults = matcher.match('api/**')
 
 ## Advanced Usage Examples
 
+### Inspection and Management
+
+The new getter properties and methods make it easy to inspect and manage your registered patterns:
+
+```ts
+const router = new PathMatcher<Function>({ useWildcards: true, useParams: true })
+
+// Register various handlers
+router.addTarget('api/users/:id', getUserHandler)
+router.addTarget('api/users', getAllUsersHandler)
+router.addTarget('admin/**', adminHandler)
+router.prependTarget('api/*', authMiddleware)
+
+// Inspect registered matchers and targets
+console.log(`Total targets: ${router.targetsCount}`) // Total targets: 4
+console.log('Registered matchers:', router.matchers)
+// Registered matchers: ['api/users/:id', 'api/users', 'admin/**', 'api/*']
+
+console.log('All targets:', router.targets)
+// All targets: [authMiddleware, getUserHandler, getAllUsersHandler, adminHandler]
+
+// Check if specific matchers exist
+const requiredRoutes = ['api/users/:id', 'api/users', 'admin/**']
+if (router.hasMatchers(requiredRoutes)) {
+  console.log('All required routes are registered')
+} else {
+  console.log('Some required routes are missing')
+}
+
+// Conditional registration
+const optionalRoutes = ['api/analytics', 'api/reports']
+if (!router.hasMatchers(optionalRoutes)) {
+  router.addTarget('api/analytics', analyticsHandler)
+  router.addTarget('api/reports', reportsHandler)
+  console.log(`Added missing routes. New total: ${router.targetsCount}`)
+}
+```
+
 ### Event System
 
 ```ts
@@ -394,6 +504,63 @@ function checkAccess(userRole: string, resourcePath: string, action: string): bo
 console.log(checkAccess('user', 'user/123/profile', 'read')) // true
 console.log(checkAccess('user', 'admin/settings', 'read')) // false
 console.log(checkAccess('admin', 'user/123/settings', 'write')) // true
+```
+
+### Debugging and Monitoring
+
+Use the inspection features for debugging and monitoring your matcher configurations:
+
+```ts
+function createMonitoredMatcher<T>() {
+  const matcher = new PathMatcher<T>({ useWildcards: true, useParams: true })
+
+  // Wrapper to log registration activities
+  const originalAddTarget = matcher.addTarget.bind(matcher)
+  matcher.addTarget = (pattern: string, target: T) => {
+    originalAddTarget(pattern, target)
+    console.log(`✅ Registered: ${pattern} (Total: ${matcher.targetsCount})`)
+  }
+
+  const originalRemoveTarget = matcher.removeTarget.bind(matcher)
+  matcher.removeTarget = (pattern: string, target: T) => {
+    const oldCount = matcher.targetsCount
+    originalRemoveTarget(pattern, target)
+    const newCount = matcher.targetsCount
+    if (oldCount !== newCount) {
+      console.log(`❌ Removed: ${pattern} (Total: ${newCount})`)
+    } else {
+      console.log(`⚠️ Target not found for removal: ${pattern}`)
+    }
+  }
+
+  // Add inspection methods
+  ;(matcher as any).inspect = () => {
+    console.log('\n📊 Matcher Inspection:')
+    console.log(`Total targets: ${matcher.targetsCount}`)
+    console.log(`Unique matchers: ${matcher.matchers.length}`)
+    console.log('Registered patterns:', matcher.matchers)
+    return {
+      targetsCount: matcher.targetsCount,
+      matchers: matcher.matchers,
+      targets: matcher.targets
+    }
+  }
+
+  return matcher
+}
+
+// Usage
+const monitored = createMonitoredMatcher<string>()
+monitored.addTarget('api/users/:id', 'user-handler')
+monitored.addTarget('api/*', 'api-middleware')
+// ✅ Registered: api/users/:id (Total: 1)
+// ✅ Registered: api/* (Total: 2)
+
+const inspection = (monitored as any).inspect()
+// 📊 Matcher Inspection:
+// Total targets: 2
+// Unique matchers: 2
+// Registered patterns: ['api/users/:id', 'api/*']
 ```
 
 ## TypeScript

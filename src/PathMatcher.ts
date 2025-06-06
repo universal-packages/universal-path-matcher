@@ -12,6 +12,56 @@ export class PathMatcher<PathTarget = any> {
   private _matchCache: Map<string, PathTargetResult<PathTarget>[]> = new Map()
   private _parseCache: Map<string, ParsedMatcher> = new Map()
 
+  /**
+   * Get the total number of registered targets
+   * @returns The number of registered targets
+   */
+  public get targetsCount(): number {
+    if (!this.options.useWildcards && !this.options.useParams) {
+      let count = 0
+      for (const targetRecords of this._targetsMap.values()) {
+        count += targetRecords.length
+      }
+      return count
+    }
+
+    return this._allTargets.length
+  }
+
+  /**
+   * Get all registered targets
+   * @returns Array of all registered targets
+   */
+  public get targets(): PathTarget[] {
+    if (!this.options.useWildcards && !this.options.useParams) {
+      const targets: PathTarget[] = []
+      for (const targetRecords of this._targetsMap.values()) {
+        for (const record of targetRecords) {
+          targets.push(record.target)
+        }
+      }
+      return targets
+    }
+
+    return this._allTargets.map((record) => record.target)
+  }
+
+  /**
+   * Get all registered matchers
+   * @returns Array of all unique registered matchers
+   */
+  public get matchers(): string[] {
+    if (!this.options.useWildcards && !this.options.useParams) {
+      return Array.from(this._targetsMap.keys())
+    }
+
+    const uniqueMatchers = new Set<string>()
+    for (const record of this._allTargets) {
+      uniqueMatchers.add(record.matcher)
+    }
+    return Array.from(uniqueMatchers)
+  }
+
   public constructor(options?: PathMatcherOptions) {
     this.options = {
       levelDelimiter: options?.levelDelimiter ?? '/',
@@ -281,6 +331,22 @@ export class PathMatcher<PathTarget = any> {
       const targetRecord = this._allTargets[targetIndex]
       this._removeTargetRecord(targetRecord)
     }
+  }
+
+  /**
+   * Check if targets have been registered for all provided matchers
+   * @param matchers - Array of matchers to check
+   * @returns True if all matchers have registered targets, false otherwise
+   */
+  public hasMatchers(matchers: string[]): boolean {
+    if (matchers.length === 0) return true
+
+    if (!this.options.useWildcards && !this.options.useParams) {
+      return matchers.every((matcher) => this._targetsMap.has(matcher) && this._targetsMap.get(matcher)!.length > 0)
+    }
+
+    const registeredMatchers = new Set(this.matchers)
+    return matchers.every((matcher) => registeredMatchers.has(matcher))
   }
 
   /**

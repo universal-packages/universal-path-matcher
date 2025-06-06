@@ -1,4 +1,5 @@
 import { runEdgeCasesTests } from './PathMatcher.test/edge-cases.test'
+import { runGettersMethodsTests } from './PathMatcher.test/getters-methods.test'
 import { runGlobstarTests } from './PathMatcher.test/globstar.test'
 import { runMatchingTests } from './PathMatcher.test/matching.test'
 import { runRemoveTargetsTests } from './PathMatcher.test/remove-targets.test'
@@ -9,6 +10,7 @@ async function runTests() {
   await runWildcardsParamsTests()
   await runRemoveTargetsTests()
   await runGlobstarTests()
+  await runGettersMethodsTests()
   await runEdgeCasesTests()
 }
 
