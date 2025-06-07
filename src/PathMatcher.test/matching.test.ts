@@ -163,5 +163,167 @@ export async function runMatchingTests() {
     assertEquals(results.length, 2, 'Should still return 2 targets after removing non-existent')
   })
 
+  // Test match with array of paths
+  await runTest('match with array of paths', () => {
+    const matcher = new PathMatcher<string>()
+
+    // Add targets to various paths
+    matcher.addTarget('api/users', 'user-handler')
+    matcher.addTarget('api/posts', 'post-handler')
+    matcher.addTarget('api/comments', 'comment-handler')
+    matcher.addTarget('api/users', 'additional-user-handler')
+    matcher.addTarget('admin/settings', 'admin-handler')
+
+    // Test matching multiple paths
+    const results = matcher.match(['api/users', 'api/posts', 'admin/settings'])
+
+    assertEquals(results.length, 4, 'Should return 4 targets total')
+    assertEquals(results[0].target, 'user-handler', 'First result should be user-handler')
+    assertEquals(results[1].target, 'additional-user-handler', 'Second result should be additional-user-handler')
+    assertEquals(results[2].target, 'post-handler', 'Third result should be post-handler')
+    assertEquals(results[3].target, 'admin-handler', 'Fourth result should be admin-handler')
+
+    // Test with paths that don't match
+    const partialResults = matcher.match(['api/users', 'non-existent', 'api/posts'])
+    assertEquals(partialResults.length, 3, 'Should return 3 targets for existing paths')
+    assertEquals(partialResults[0].target, 'user-handler', 'First result should be user-handler')
+    assertEquals(partialResults[1].target, 'additional-user-handler', 'Second result should be additional-user-handler')
+    assertEquals(partialResults[2].target, 'post-handler', 'Third result should be post-handler')
+
+    // Test with empty array
+    const emptyResults = matcher.match([])
+    assertEquals(emptyResults.length, 0, 'Empty array should return no results')
+
+    // Test with single path in array (should behave like string)
+    const singleResults = matcher.match(['api/comments'])
+    assertEquals(singleResults.length, 1, 'Single path array should return 1 target')
+    assertEquals(singleResults[0].target, 'comment-handler', 'Result should be comment-handler')
+  })
+
+  // Test match with array of paths - wildcard mode
+  await runTest('match with array of paths - wildcard mode', () => {
+    const matcher = new PathMatcher<string>({ useWildcards: true, useParams: true })
+
+    // Add targets with wildcards and params
+    matcher.addTarget('api/users/:id', 'user-by-id-handler')
+    matcher.addTarget('api/posts/*', 'post-wildcard-handler')
+    matcher.addTarget('admin/**', 'admin-wildcard-handler')
+    matcher.addTarget('logs/**/error', 'error-handler')
+    matcher.addTarget('**/critical', 'critical-handler')
+
+    // Test matching multiple paths with wildcards/params
+    const results = matcher.match([
+      'api/users/123',
+      'api/posts/new',
+      'admin/settings/critical', // This should match both admin/** and **/critical
+      'logs/app/system/error',
+      'system/alerts/critical'
+    ])
+
+    assertEquals(results.length, 6, 'Should return 6 targets total')
+
+    // Check user handler
+    const userResult = results.find((r) => r.target === 'user-by-id-handler')
+    assertEquals(userResult?.params?.id, '123', 'User handler should have id param')
+
+    // Check post handler
+    const postResult = results.find((r) => r.target === 'post-wildcard-handler')
+    assertEquals(postResult !== undefined, true, 'Should have post wildcard handler')
+
+    // Check admin handler
+    const adminResult = results.find((r) => r.target === 'admin-wildcard-handler')
+    assertEquals(adminResult !== undefined, true, 'Should have admin wildcard handler')
+
+    // Check error handler
+    const errorResult = results.find((r) => r.target === 'error-handler')
+    assertEquals(errorResult !== undefined, true, 'Should have error handler')
+
+    // Check critical handlers (should appear twice - one from each path ending with 'critical')
+    const criticalResults = results.filter((r) => r.target === 'critical-handler')
+    assertEquals(criticalResults.length, 2, 'Should have 2 critical handlers from different paths')
+  })
+
+  // Test match with array of paths and limited targets
+  await runTest('match with array of paths and limited targets', () => {
+    const matcher = new PathMatcher<string>()
+
+    // Add targets with limited matches
+    matcher.addTargetOnce('temp/resource1', 'once-handler-1')
+    matcher.addTargetOnce('temp/resource2', 'once-handler-2')
+    matcher.addTargetMany('limited/resource1', 2, 'limited-handler-1')
+    matcher.addTargetMany('limited/resource2', 2, 'limited-handler-2')
+    matcher.addTarget('permanent/resource', 'permanent-handler')
+
+    // First match with array should consume one-time handlers
+    let results = matcher.match(['temp/resource1', 'temp/resource2', 'permanent/resource'])
+    assertEquals(results.length, 3, 'Should return 3 targets on first match')
+    assertEquals(results[0].target, 'once-handler-1', 'First result should be once-handler-1')
+    assertEquals(results[1].target, 'once-handler-2', 'Second result should be once-handler-2')
+    assertEquals(results[2].target, 'permanent-handler', 'Third result should be permanent-handler')
+
+    // Second match should not include one-time handlers
+    results = matcher.match(['temp/resource1', 'temp/resource2', 'permanent/resource'])
+    assertEquals(results.length, 1, 'Should return 1 target on second match')
+    assertEquals(results[0].target, 'permanent-handler', 'Result should be permanent-handler')
+
+    // Test limited handlers
+    results = matcher.match(['limited/resource1', 'limited/resource2'])
+    assertEquals(results.length, 2, 'Should return 2 limited handlers')
+    assertEquals(results[0].target, 'limited-handler-1', 'First result should be limited-handler-1')
+    assertEquals(results[1].target, 'limited-handler-2', 'Second result should be limited-handler-2')
+
+    // Second match with limited handlers
+    results = matcher.match(['limited/resource1', 'limited/resource2'])
+    assertEquals(results.length, 2, 'Should return 2 limited handlers on second match')
+
+    // Third match should not include limited handlers (exhausted)
+    results = matcher.match(['limited/resource1', 'limited/resource2'])
+    assertEquals(results.length, 0, 'Should return 0 targets after exhausting limited handlers')
+  })
+
+  // Test match with array of paths and duplicate paths
+  await runTest('match with array of paths and duplicate paths', () => {
+    const matcher = new PathMatcher<string>()
+
+    matcher.addTarget('api/data', 'data-handler')
+    matcher.addTargetOnce('temp/data', 'temp-handler')
+
+    // Test with duplicate paths in array
+    const results = matcher.match(['api/data', 'api/data', 'temp/data'])
+    assertEquals(results.length, 3, 'Should return 3 results with duplicates')
+    assertEquals(results[0].target, 'data-handler', 'First result should be data-handler')
+    assertEquals(results[1].target, 'data-handler', 'Second result should be data-handler (duplicate)')
+    assertEquals(results[2].target, 'temp-handler', 'Third result should be temp-handler')
+
+    // Second match should only return permanent handler twice (temp exhausted)
+    const secondResults = matcher.match(['api/data', 'api/data', 'temp/data'])
+    assertEquals(secondResults.length, 2, 'Should return 2 results on second match')
+    assertEquals(secondResults[0].target, 'data-handler', 'First result should be data-handler')
+    assertEquals(secondResults[1].target, 'data-handler', 'Second result should be data-handler')
+  })
+
+  // Test match with array of paths - pattern-to-pattern matching
+  await runTest('match with array of paths - pattern-to-pattern matching', () => {
+    const matcher = new PathMatcher<string>({ useWildcards: true })
+
+    // Register various patterns
+    matcher.addTarget('user/admin/profile', 'admin-profile')
+    matcher.addTarget('user/guest/profile', 'guest-profile')
+    matcher.addTarget('user/manager/settings', 'manager-settings')
+    matcher.addTarget('api/v1/users', 'api-v1-users')
+    matcher.addTarget('api/v2/posts', 'api-v2-posts')
+
+    // Use wildcard patterns in the match array
+    const results = matcher.match(['user/*/profile', 'api/**/users'])
+
+    // Should match admin-profile, guest-profile, and api-v1-users
+    assertEquals(results.length, 3, 'Should return 3 pattern matches')
+
+    const targets = results.map((r) => r.target).sort()
+    assertEquals(targets.includes('admin-profile'), true, 'Should include admin-profile')
+    assertEquals(targets.includes('guest-profile'), true, 'Should include guest-profile')
+    assertEquals(targets.includes('api-v1-users'), true, 'Should include api-v1-users')
+  })
+
   console.log('\n✅ All Matching tests completed!')
 }

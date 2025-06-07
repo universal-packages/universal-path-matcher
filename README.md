@@ -219,38 +219,96 @@ matcher.prependTargetMany('api/data', 2, 'limited-priority')
 #### removeTarget
 
 ```ts
-removeTarget(matcher: string, target: PathTarget): void
+removeTarget(matcher: string | string[], target: PathTarget): void
 ```
 
-Removes a specific target from the specified matcher pattern.
+Removes a specific target from the specified matcher pattern(s). You can pass either a single matcher string or an array of matcher strings to remove the target from multiple patterns at once.
 
 ```ts
 const matcher = new PathMatcher<string>()
 matcher.addTarget('api/users', 'handler-1')
 matcher.addTarget('api/users', 'handler-2')
+matcher.addTarget('api/posts', 'handler-1')
+matcher.addTarget('api/comments', 'handler-3')
 
+// Remove from a single matcher
 matcher.removeTarget('api/users', 'handler-1')
 
+const userResults = matcher.match('api/users')
+console.log(userResults.length) // 1
+console.log(userResults[0].target) // 'handler-2'
+
+// Remove from multiple matchers at once
+matcher.removeTarget(['api/posts', 'api/comments'], 'handler-1')
+
+const postResults = matcher.match('api/posts')
+const commentResults = matcher.match('api/comments')
+console.log(postResults.length) // 0 (handler-1 was removed)
+console.log(commentResults.length) // 1 (handler-1 didn't exist here, so handler-3 remains)
+```
+
+#### removeAllTargets
+
+```ts
+removeAllTargets(): void
+```
+
+Removes all targets from all matcher patterns, effectively clearing the entire matcher.
+
+```ts
+const matcher = new PathMatcher<string>()
+matcher.addTarget('api/users', 'handler-1')
+matcher.addTarget('api/posts', 'handler-2')
+matcher.addTarget('admin/settings', 'handler-3')
+
+console.log(matcher.targetsCount) // 3
+
+matcher.removeAllTargets()
+
+console.log(matcher.targetsCount) // 0
+console.log(matcher.matchers.length) // 0
+console.log(matcher.targets.length) // 0
+
+// All match operations will return empty arrays
 const results = matcher.match('api/users')
-console.log(results.length) // 1
-console.log(results[0].target) // 'handler-2'
+console.log(results.length) // 0
+
+// You can add new targets after clearing
+matcher.addTarget('new/path', 'new-handler')
 ```
 
 #### match
 
 ```ts
-match(path: string): PathTargetResult<PathTarget>[]
+match(path: string | string[]): PathTargetResult<PathTarget>[]
 ```
 
-Matches a path against all registered patterns and returns matching targets.
+Matches a path or array of paths against all registered patterns and returns matching targets. When an array is provided, all targets that match any of the provided paths are returned.
 
 ```ts
 const matcher = new PathMatcher<string>()
 matcher.addTarget('user/profile', 'profile-handler')
+matcher.addTarget('user/settings', 'settings-handler')
+matcher.addTarget('api/data', 'data-handler')
 
-const results = matcher.match('user/profile')
-console.log(results[0])
+// Single path matching
+const singleResult = matcher.match('user/profile')
+console.log(singleResult[0])
 // { matcher: 'user/profile', target: 'profile-handler' }
+
+// Multiple paths matching
+const multipleResults = matcher.match(['user/profile', 'user/settings', 'api/data'])
+console.log(multipleResults.length) // 3
+console.log(multipleResults.map(r => r.target))
+// ['profile-handler', 'settings-handler', 'data-handler']
+
+// Array with non-matching paths (only existing matches are returned)
+const partialResults = matcher.match(['user/profile', 'non-existent', 'api/data'])
+console.log(partialResults.length) // 2 (only matching paths return results)
+
+// Empty array returns empty results
+const emptyResults = matcher.match([])
+console.log(emptyResults.length) // 0
 ```
 
 #### hasMatchers
@@ -352,6 +410,65 @@ const complexResults = matcher.match('api/v2/auth/middleware/user/user789/data')
 console.log(complexResults[0].params) // { version: 'v2', id: 'user789' }
 ```
 
+## Array Path Matching
+
+The `match` method supports matching multiple paths at once by passing an array of paths. This is useful for batch operations, event handling, and performance optimization.
+
+```ts
+const matcher = new PathMatcher<string>({ useWildcards: true, useParams: true })
+
+matcher.addTarget('api/users/:id', 'user-handler')
+matcher.addTarget('api/posts/*', 'post-handler')
+matcher.addTarget('admin/**', 'admin-handler')
+matcher.addTarget('**/logs', 'log-handler')
+
+// Match multiple paths at once
+const results = matcher.match([
+  'api/users/123',
+  'api/posts/new-post',
+  'admin/settings',
+  'system/app/logs'
+])
+
+console.log(results.length) // 4
+console.log(results.map(r => ({ target: r.target, params: r.params })))
+// [
+//   { target: 'user-handler', params: { id: '123' } },
+//   { target: 'post-handler', params: undefined },
+//   { target: 'admin-handler', params: undefined },
+//   { target: 'log-handler', params: undefined }
+// ]
+
+// Paths can match multiple patterns
+const overlappingResults = matcher.match(['admin/logs', 'api/users/456'])
+// 'admin/logs' matches both 'admin/**' and '**/logs'
+console.log(overlappingResults.length) // 3 results
+```
+
+### Array Matching Features
+
+- **Preserves Order**: Results maintain the order of input paths
+- **Allows Duplicates**: Same path can appear multiple times in the array
+- **Handles Non-matches**: Paths that don't match any patterns are silently skipped
+- **Limited Target Support**: Works with `addTargetOnce`, `addTargetMany`, and remaining match counts
+- **Efficient**: Uses the same optimized matching algorithms as single path matching
+
+```ts
+const matcher = new PathMatcher<string>()
+
+// Add limited targets
+matcher.addTargetOnce('temp/resource', 'temp-handler')
+matcher.addTargetMany('limited/resource', 2, 'limited-handler')
+
+// First match consumes limited targets
+const firstMatch = matcher.match(['temp/resource', 'limited/resource'])
+console.log(firstMatch.length) // 2
+
+// Second match - temp-handler is exhausted, limited-handler still available
+const secondMatch = matcher.match(['temp/resource', 'limited/resource'])
+console.log(secondMatch.length) // 1 (only limited-handler)
+```
+
 ## Pattern-to-Pattern Matching
 
 When wildcards are enabled, you can use wildcard patterns in the input path to match against registered patterns:
@@ -410,6 +527,15 @@ if (!router.hasMatchers(optionalRoutes)) {
   router.addTarget('api/reports', reportsHandler)
   console.log(`Added missing routes. New total: ${router.targetsCount}`)
 }
+
+// Bulk removal operations
+const deprecatedRoutes = ['api/v1/users/:id', 'api/v1/posts/:id']
+router.removeTarget(deprecatedRoutes, oldMiddleware)
+console.log('Removed old middleware from deprecated routes')
+
+// Complete reset for testing or reconfiguration
+router.removeAllTargets()
+console.log('Router completely cleared for fresh configuration')
 ```
 
 ### Event System
@@ -426,7 +552,7 @@ eventMatcher.addTarget('user/:id/updated', handleUserUpdated)
 eventMatcher.addTarget('admin/**', handleAdminEvents)
 eventMatcher.addTarget('**/error', handleErrors)
 
-// Dispatch events
+// Dispatch single event
 function dispatchEvent(eventPath: string, data: any) {
   const handlers = eventMatcher.match(eventPath)
   handlers.forEach(({ target: handler, params }) => {
@@ -436,6 +562,17 @@ function dispatchEvent(eventPath: string, data: any) {
 
 dispatchEvent('user/123/created', { name: 'John' })
 // Calls handleUserCreated with params: { id: '123' }
+
+// Dispatch multiple events at once
+function dispatchEvents(eventPaths: string[], data: any) {
+  const handlers = eventMatcher.match(eventPaths)
+  handlers.forEach(({ target: handler, params }) => {
+    handler(data, params)
+  })
+}
+
+dispatchEvents(['user/123/created', 'user/123/updated', 'admin/user/created'], { name: 'John' })
+// Calls all matching handlers for all provided event paths
 ```
 
 ### API Router
@@ -504,6 +641,70 @@ function checkAccess(userRole: string, resourcePath: string, action: string): bo
 console.log(checkAccess('user', 'user/123/profile', 'read')) // true
 console.log(checkAccess('user', 'admin/settings', 'read')) // false
 console.log(checkAccess('admin', 'user/123/settings', 'write')) // true
+
+// Bulk permission management
+function revokeUserPermissions(userId: string) {
+  const userPaths = [`user/${userId}/profile`, `user/${userId}/settings`, `user/${userId}/data`]
+  acl.removeTarget(userPaths, { role: 'user', action: 'read' })
+}
+
+// Clear all permissions for maintenance
+function maintenanceMode() {
+  acl.removeAllTargets()
+  acl.addTarget('**', { role: 'admin', action: 'all' })
+  console.log('Maintenance mode: Only admin access allowed')
+}
+```
+
+### Bulk Target Management
+
+```ts
+const apiRouter = new PathMatcher<Function>({ useWildcards: true, useParams: true })
+
+// Add various handlers
+apiRouter.addTarget('api/v1/users/:id', getUserHandler)
+apiRouter.addTarget('api/v2/users/:id', getUserHandlerV2)
+apiRouter.addTarget('api/v1/posts/:id', getPostHandler)
+apiRouter.addTarget('api/v2/posts/:id', getPostHandlerV2)
+
+// Add deprecated middleware to multiple routes
+const deprecatedPaths = ['api/v1/users/:id', 'api/v1/posts/:id']
+apiRouter.addTarget(deprecatedPaths, deprecationMiddleware)
+
+// Remove deprecated middleware from all v1 endpoints at once
+function upgradeApiVersion() {
+  const v1Endpoints = ['api/v1/users/:id', 'api/v1/posts/:id', 'api/v1/comments/:id']
+  apiRouter.removeTarget(v1Endpoints, deprecationMiddleware)
+  console.log('Deprecated middleware removed from all v1 endpoints')
+}
+
+// Complete API reset
+function resetApi() {
+  apiRouter.removeAllTargets()
+  console.log('API completely reset, ready for new configuration')
+  
+  // Re-initialize with new handlers
+  apiRouter.addTarget('api/v3/**', newUniversalHandler)
+}
+
+// Batch request processing
+function processMultipleRequests(paths: string[]) {
+  const allHandlers = apiRouter.match(paths)
+  
+  // Group handlers by path for organized processing
+  const handlersByPath = new Map<string, Function[]>()
+  
+  let pathIndex = 0
+  for (const path of paths) {
+    const pathHandlers = apiRouter.match(path)
+    handlersByPath.set(path, pathHandlers.map(h => h.target))
+  }
+  
+  // Process all paths with their respective handlers
+  for (const [path, handlers] of handlersByPath) {
+    handlers.forEach(handler => handler(path))
+  }
+}
 ```
 
 ### Debugging and Monitoring
@@ -522,15 +723,25 @@ function createMonitoredMatcher<T>() {
   }
 
   const originalRemoveTarget = matcher.removeTarget.bind(matcher)
-  matcher.removeTarget = (pattern: string, target: T) => {
+  matcher.removeTarget = (pattern: string | string[], target: T) => {
     const oldCount = matcher.targetsCount
     originalRemoveTarget(pattern, target)
     const newCount = matcher.targetsCount
-    if (oldCount !== newCount) {
-      console.log(`❌ Removed: ${pattern} (Total: ${newCount})`)
+    const removedCount = oldCount - newCount
+    if (removedCount > 0) {
+      const patterns = Array.isArray(pattern) ? pattern.join(', ') : pattern
+      console.log(`❌ Removed from ${removedCount} matcher(s): ${patterns} (Total: ${newCount})`)
     } else {
-      console.log(`⚠️ Target not found for removal: ${pattern}`)
+      const patterns = Array.isArray(pattern) ? pattern.join(', ') : pattern
+      console.log(`⚠️ Target not found for removal in: ${patterns}`)
     }
+  }
+
+  const originalRemoveAllTargets = matcher.removeAllTargets.bind(matcher)
+  matcher.removeAllTargets = () => {
+    const oldCount = matcher.targetsCount
+    originalRemoveAllTargets()
+    console.log(`🧹 Cleared all targets (${oldCount} targets removed)`)
   }
 
   // Add inspection methods

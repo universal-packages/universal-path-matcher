@@ -71,102 +71,27 @@ export class PathMatcher<PathTarget = any> {
   }
 
   /**
-   * Matches a path against all matchers and returns the targets that matched the path
-   * The path can also contain wildcards but not params that only work if useWildcards is true
+   * Matches a path or paths against all matchers and returns the targets that matched
+   * The path(s) can also contain wildcards but not params that only work if useWildcards is true
    * or useParams is true.
-   * @param path - The path to match
-   * @returns The targets that matched the path
+   * @param path - The path or array of paths to match
+   * @returns The targets that matched any of the provided paths
    */
-  public match(path: string): PathTargetResult<PathTarget>[] {
-    if (!this.options.useWildcards && !this.options.useParams) {
-      // Use optimized path for static matching
-      const targetRecords = this._targetsMap.get(path)
+  public match(path: string | string[]): PathTargetResult<PathTarget>[] {
+    // Handle array of paths
+    if (Array.isArray(path)) {
+      const allResults: PathTargetResult<PathTarget>[] = []
 
-      if (!targetRecords) return []
-
-      const results: PathTargetResult<PathTarget>[] = []
-
-      for (let i = targetRecords.length - 1; i >= 0; i--) {
-        const targetRecord = targetRecords[i]
-        if (targetRecord.remainingMatches) {
-          targetRecord.remainingMatches--
-
-          if (targetRecord.remainingMatches === 0) {
-            targetRecords.splice(i, 1)
-          }
-        }
-
-        results.push(targetRecord.constantResult!)
+      for (const singlePath of path) {
+        const results = this._matchSingle(singlePath)
+        allResults.push(...results)
       }
 
-      return results.reverse()
+      return allResults
     }
 
-    // Advanced matching with wildcards/params
-    const sanitizedPath = this.sanitizePathOrMatcher(path)
-
-    // Check if the input path contains wildcards (pattern-to-pattern matching)
-    const pathContainsWildcards = this.options.useWildcards && (sanitizedPath.includes('*') || sanitizedPath.includes('**'))
-
-    if (pathContainsWildcards) {
-      // Pattern-to-pattern matching: find all registered matchers that would be matched by this wildcard pattern
-      return this._matchPatternToPatterns(sanitizedPath)
-    }
-
-    // Check cache first
-    const cacheKey = sanitizedPath
-    if (this._matchCache.has(cacheKey)) {
-      const cachedResults = this._matchCache.get(cacheKey)!
-      // Handle remaining matches for cached results
-      const validResults: PathTargetResult<PathTarget>[] = []
-
-      for (const result of cachedResults) {
-        const targetRecord = this._allTargets.find((t) => t.matcher === result.matcher && t.target === result.target)
-
-        if (targetRecord) {
-          if (targetRecord.remainingMatches !== undefined) {
-            targetRecord.remainingMatches--
-            if (targetRecord.remainingMatches === 0) {
-              this._removeTargetRecord(targetRecord)
-            }
-          }
-          validResults.push(result)
-        }
-      }
-
-      return validResults
-    }
-
-    const pathSegments = sanitizedPath === '' ? [] : sanitizedPath.split(this.options.levelDelimiter!)
-    const results: PathTargetResult<PathTarget>[] = []
-    const prependedResults: PathTargetResult<PathTarget>[] = []
-    const seenTargets = new Set<string>() // To avoid duplicates
-
-    // Match against trie
-    this._matchInTrie(pathSegments, this._trie, {}, results, prependedResults, seenTargets)
-
-    // Handle remaining matches decrementation and removal
-    const allResults = [...prependedResults, ...results]
-    const finalResults: PathTargetResult<PathTarget>[] = []
-
-    for (const result of allResults) {
-      const targetRecord = this._allTargets.find((t) => t.matcher === result.matcher && t.target === result.target)
-
-      if (targetRecord) {
-        if (targetRecord.remainingMatches !== undefined) {
-          targetRecord.remainingMatches--
-          if (targetRecord.remainingMatches === 0) {
-            this._removeTargetRecord(targetRecord)
-          }
-        }
-        finalResults.push(result)
-      }
-    }
-
-    // Cache result (but cache the original results before decrementing)
-    this._matchCache.set(cacheKey, [...finalResults])
-
-    return finalResults
+    // Handle single path
+    return this._matchSingle(path)
   }
 
   /**
@@ -306,11 +231,135 @@ export class PathMatcher<PathTarget = any> {
   }
 
   /**
-   * Remove a target from the matcher
+   * Remove a target from the matcher(s)
+   * @param matcher - The matcher(s) to remove the target from - can be a single string or array of strings
+   * @param target - The target to remove
+   */
+  public removeTarget(matcher: string | string[], target: PathTarget): void {
+    const matchers = Array.isArray(matcher) ? matcher : [matcher]
+
+    for (const singleMatcher of matchers) {
+      this._removeSingleTarget(singleMatcher, target)
+    }
+  }
+
+  /**
+   * Remove all targets from all matchers
+   */
+  public removeAllTargets(): void {
+    if (!this.options.useWildcards && !this.options.useParams) {
+      this._targetsMap.clear()
+      return
+    }
+
+    this._allTargets.length = 0
+    this._trie = this._createTrieNode()
+    this._clearMatchCache()
+  }
+
+  /**
+   * Internal method to match a single path
+   * @param path - The single path to match
+   * @returns The targets that matched the path
+   */
+  private _matchSingle(path: string): PathTargetResult<PathTarget>[] {
+    if (!this.options.useWildcards && !this.options.useParams) {
+      // Use optimized path for static matching
+      const targetRecords = this._targetsMap.get(path)
+
+      if (!targetRecords) return []
+
+      const results: PathTargetResult<PathTarget>[] = []
+
+      for (let i = targetRecords.length - 1; i >= 0; i--) {
+        const targetRecord = targetRecords[i]
+        if (targetRecord.remainingMatches) {
+          targetRecord.remainingMatches--
+
+          if (targetRecord.remainingMatches === 0) {
+            targetRecords.splice(i, 1)
+          }
+        }
+
+        results.push(targetRecord.constantResult!)
+      }
+
+      return results.reverse()
+    }
+
+    // Advanced matching with wildcards/params
+    const sanitizedPath = this.sanitizePathOrMatcher(path)
+
+    // Check if the input path contains wildcards (pattern-to-pattern matching)
+    const pathContainsWildcards = this.options.useWildcards && (sanitizedPath.includes('*') || sanitizedPath.includes('**'))
+
+    if (pathContainsWildcards) {
+      // Pattern-to-pattern matching: find all registered matchers that would be matched by this wildcard pattern
+      return this._matchPatternToPatterns(sanitizedPath)
+    }
+
+    // Check cache first
+    const cacheKey = sanitizedPath
+    if (this._matchCache.has(cacheKey)) {
+      const cachedResults = this._matchCache.get(cacheKey)!
+      // Handle remaining matches for cached results
+      const validResults: PathTargetResult<PathTarget>[] = []
+
+      for (const result of cachedResults) {
+        const targetRecord = this._allTargets.find((t) => t.matcher === result.matcher && t.target === result.target)
+
+        if (targetRecord) {
+          if (targetRecord.remainingMatches !== undefined) {
+            targetRecord.remainingMatches--
+            if (targetRecord.remainingMatches === 0) {
+              this._removeTargetRecord(targetRecord)
+            }
+          }
+          validResults.push(result)
+        }
+      }
+
+      return validResults
+    }
+
+    const pathSegments = sanitizedPath === '' ? [] : sanitizedPath.split(this.options.levelDelimiter!)
+    const results: PathTargetResult<PathTarget>[] = []
+    const prependedResults: PathTargetResult<PathTarget>[] = []
+    const seenTargets = new Set<string>() // To avoid duplicates
+
+    // Match against trie
+    this._matchInTrie(pathSegments, this._trie, {}, results, prependedResults, seenTargets)
+
+    // Handle remaining matches decrementation and removal
+    const allResults = [...prependedResults, ...results]
+    const finalResults: PathTargetResult<PathTarget>[] = []
+
+    for (const result of allResults) {
+      const targetRecord = this._allTargets.find((t) => t.matcher === result.matcher && t.target === result.target)
+
+      if (targetRecord) {
+        if (targetRecord.remainingMatches !== undefined) {
+          targetRecord.remainingMatches--
+          if (targetRecord.remainingMatches === 0) {
+            this._removeTargetRecord(targetRecord)
+          }
+        }
+        finalResults.push(result)
+      }
+    }
+
+    // Cache result (but cache the original results before decrementing)
+    this._matchCache.set(cacheKey, [...finalResults])
+
+    return finalResults
+  }
+
+  /**
+   * Remove a target from a single matcher (internal helper)
    * @param matcher - The matcher to remove the target from
    * @param target - The target to remove
    */
-  public removeTarget(matcher: string, target: PathTarget): void {
+  private _removeSingleTarget(matcher: string, target: PathTarget): void {
     if (!this.options.useWildcards && !this.options.useParams) {
       const targetRecords = this._targetsMap.get(matcher)
 
