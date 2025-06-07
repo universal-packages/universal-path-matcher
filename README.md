@@ -250,19 +250,44 @@ console.log(commentResults.length) // 1 (handler-1 didn't exist here, so handler
 #### removeAllTargets
 
 ```ts
-removeAllTargets(): void
+removeAllTargets(matchers?: string | string[]): void
 ```
 
-Removes all targets from all matcher patterns, effectively clearing the entire matcher.
+Removes all targets from all matcher patterns, or removes all targets from specific matcher patterns. When called without arguments, it clears the entire matcher. When called with matcher(s), it removes all targets from only those specific patterns, effectively removing those matchers.
 
 ```ts
-const matcher = new PathMatcher<string>()
-matcher.addTarget('api/users', 'handler-1')
-matcher.addTarget('api/posts', 'handler-2')
-matcher.addTarget('admin/settings', 'handler-3')
+const matcher = new PathMatcher<string>({ useWildcards: true, useParams: true })
 
-console.log(matcher.targetsCount) // 3
+// Set up various matchers with multiple targets each
+matcher.addTarget('api/users/:id', 'user-handler-1')
+matcher.addTarget('api/users/:id', 'user-handler-2')
+matcher.addTarget('api/posts/*', 'post-handler-1')
+matcher.addTarget('api/posts/*', 'post-handler-2')
+matcher.addTarget('admin/**', 'admin-handler')
+matcher.addTarget('logs/**/error', 'error-handler')
 
+console.log(matcher.targetsCount) // 6
+console.log(matcher.matchers.length) // 4
+
+// Remove all targets from a specific matcher
+matcher.removeAllTargets('api/users/:id')
+
+console.log(matcher.targetsCount) // 4 (2 user handlers removed)
+console.log(matcher.matchers.length) // 3 (user matcher removed)
+
+const userResults = matcher.match('api/users/123')
+const postResults = matcher.match('api/posts/new')
+
+console.log(userResults.length) // 0 (no user handlers remain)
+console.log(postResults.length) // 2 (post handlers still exist)
+
+// Remove all targets from multiple matchers at once
+matcher.removeAllTargets(['api/posts/*', 'logs/**/error'])
+
+console.log(matcher.targetsCount) // 1 (only admin handler remains)
+console.log(matcher.matchers) // ['admin/**']
+
+// Remove all targets from all matchers (original behavior)
 matcher.removeAllTargets()
 
 console.log(matcher.targetsCount) // 0
@@ -270,7 +295,7 @@ console.log(matcher.matchers.length) // 0
 console.log(matcher.targets.length) // 0
 
 // All match operations will return empty arrays
-const results = matcher.match('api/users')
+const results = matcher.match('admin/anything')
 console.log(results.length) // 0
 
 // You can add new targets after clearing
@@ -666,10 +691,14 @@ apiRouter.addTarget('api/v1/users/:id', getUserHandler)
 apiRouter.addTarget('api/v2/users/:id', getUserHandlerV2)
 apiRouter.addTarget('api/v1/posts/:id', getPostHandler)
 apiRouter.addTarget('api/v2/posts/:id', getPostHandlerV2)
+apiRouter.addTarget('api/v1/comments/:id', getCommentHandler)
 
 // Add deprecated middleware to multiple routes
 const deprecatedPaths = ['api/v1/users/:id', 'api/v1/posts/:id']
 apiRouter.addTarget(deprecatedPaths, deprecationMiddleware)
+
+console.log(`Initial routes: ${apiRouter.matchers.length}`) // 5 routes
+console.log(`Total handlers: ${apiRouter.targetsCount}`) // 7 handlers
 
 // Remove deprecated middleware from all v1 endpoints at once
 function upgradeApiVersion() {
@@ -678,6 +707,27 @@ function upgradeApiVersion() {
   console.log('Deprecated middleware removed from all v1 endpoints')
 }
 
+// Remove all handlers from specific API versions
+function deprecateApiVersion(version: string) {
+  const versionPatterns = apiRouter.matchers.filter(matcher => matcher.includes(`api/${version}/`))
+  apiRouter.removeAllTargets(versionPatterns)
+  console.log(`All ${version} API handlers removed`)
+}
+
+// Example: Remove all v1 API handlers while keeping v2
+deprecateApiVersion('v1')
+console.log(`Routes after v1 removal: ${apiRouter.matchers.length}`) // Only v2 routes remain
+
+// Selective cleanup of specific resource types
+function removeResourceHandlers(resourceType: string) {
+  const resourcePatterns = apiRouter.matchers.filter(matcher => matcher.includes(`/${resourceType}/`))
+  apiRouter.removeAllTargets(resourcePatterns)
+  console.log(`All ${resourceType} handlers removed`)
+}
+
+// Example: Remove all user-related endpoints
+removeResourceHandlers('users')
+
 // Complete API reset
 function resetApi() {
   apiRouter.removeAllTargets()
@@ -685,6 +735,17 @@ function resetApi() {
   
   // Re-initialize with new handlers
   apiRouter.addTarget('api/v3/**', newUniversalHandler)
+}
+
+// Partial reset - keep only essential routes
+function resetToEssentials() {
+  const essentialRoutes = ['api/health', 'api/status', 'api/version']
+  const allRoutes = apiRouter.matchers
+  const routesToRemove = allRoutes.filter(route => !essentialRoutes.includes(route))
+  
+  apiRouter.removeAllTargets(routesToRemove)
+  console.log(`Removed ${routesToRemove.length} non-essential routes`)
+  console.log(`Essential routes remaining: ${apiRouter.matchers.length}`)
 }
 
 // Batch request processing
@@ -738,10 +799,22 @@ function createMonitoredMatcher<T>() {
   }
 
   const originalRemoveAllTargets = matcher.removeAllTargets.bind(matcher)
-  matcher.removeAllTargets = () => {
+  matcher.removeAllTargets = (matchers?: string | string[]) => {
     const oldCount = matcher.targetsCount
-    originalRemoveAllTargets()
-    console.log(`🧹 Cleared all targets (${oldCount} targets removed)`)
+    const oldMatchers = [...matcher.matchers]
+    
+    originalRemoveAllTargets(matchers)
+    
+    const newCount = matcher.targetsCount
+    const removedCount = oldCount - newCount
+    
+    if (!matchers) {
+      console.log(`🧹 Cleared all targets (${removedCount} targets removed)`)
+    } else {
+      const matchersArray = Array.isArray(matchers) ? matchers : [matchers]
+      const actuallyRemoved = matchersArray.filter(m => oldMatchers.includes(m))
+      console.log(`🗑️ Removed all targets from ${actuallyRemoved.length} matcher(s): ${actuallyRemoved.join(', ')} (${removedCount} targets removed)`)
+    }
   }
 
   // Add inspection methods
@@ -764,14 +837,24 @@ function createMonitoredMatcher<T>() {
 const monitored = createMonitoredMatcher<string>()
 monitored.addTarget('api/users/:id', 'user-handler')
 monitored.addTarget('api/*', 'api-middleware')
+monitored.addTarget('admin/settings', 'admin-handler')
 // ✅ Registered: api/users/:id (Total: 1)
 // ✅ Registered: api/* (Total: 2)
+// ✅ Registered: admin/settings (Total: 3)
+
+// Remove all targets from specific matchers
+monitored.removeAllTargets(['api/users/:id', 'admin/settings'])
+// 🗑️ Removed all targets from 2 matcher(s): api/users/:id, admin/settings (2 targets removed)
+
+// Clear everything
+monitored.removeAllTargets()
+// 🧹 Cleared all targets (1 targets removed)
 
 const inspection = (monitored as any).inspect()
 // 📊 Matcher Inspection:
-// Total targets: 2
-// Unique matchers: 2
-// Registered patterns: ['api/users/:id', 'api/*']
+// Total targets: 0
+// Unique matchers: 0
+// Registered patterns: []
 ```
 
 ## TypeScript

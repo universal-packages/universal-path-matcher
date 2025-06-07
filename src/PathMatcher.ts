@@ -244,17 +244,46 @@ export class PathMatcher<PathTarget = any> {
   }
 
   /**
-   * Remove all targets from all matchers
+   * Remove all targets from all matchers, or remove all targets from specific matchers
+   * @param matchers - Optional matcher(s) to remove all targets from. If not provided, removes all targets from all matchers
    */
-  public removeAllTargets(): void {
-    if (!this.options.useWildcards && !this.options.useParams) {
-      this._targetsMap.clear()
+  public removeAllTargets(matchers?: string | string[]): void {
+    if (!matchers) {
+      // Remove all targets from all matchers (original behavior)
+      if (!this.options.useWildcards && !this.options.useParams) {
+        this._targetsMap.clear()
+        return
+      }
+
+      this._allTargets.length = 0
+      this._trie = this._createTrieNode()
+      this._clearMatchCache()
       return
     }
 
-    this._allTargets.length = 0
-    this._trie = this._createTrieNode()
-    this._clearMatchCache()
+    // Remove all targets from specific matchers
+    const matchersArray = Array.isArray(matchers) ? matchers : [matchers]
+
+    if (!this.options.useWildcards && !this.options.useParams) {
+      // Use optimized path - remove specific matchers from the map
+      for (const matcher of matchersArray) {
+        this._targetsMap.delete(matcher)
+      }
+      return
+    }
+
+    // Advanced path - remove all target records that match the specified matchers
+    const matchersSet = new Set(matchersArray)
+    const originalLength = this._allTargets.length
+
+    // Filter out target records that match the specified matchers
+    this._allTargets = this._allTargets.filter((targetRecord) => !matchersSet.has(targetRecord.matcher))
+
+    // Only rebuild trie and clear cache if we actually removed something
+    if (this._allTargets.length !== originalLength) {
+      this._rebuildTrie()
+      this._clearMatchCache()
+    }
   }
 
   /**

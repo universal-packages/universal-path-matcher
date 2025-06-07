@@ -411,5 +411,210 @@ export async function runRemoveTargetsTests() {
     assertEquals(results[0].target, 'test-handler', 'Should still match test-handler')
   })
 
+  // Test removeAllTargets with specific matchers - advanced mode
+  await runTest('removeAllTargets with specific matchers - advanced mode', () => {
+    const matcher = new PathMatcher<string>({ useWildcards: true, useParams: true })
+
+    // Add targets to various matchers
+    matcher.addTarget('api/users/:id', 'user-handler-1')
+    matcher.addTarget('api/users/:id', 'user-handler-2')
+    matcher.addTarget('api/posts/*', 'post-handler-1')
+    matcher.addTarget('api/posts/*', 'post-handler-2')
+    matcher.addTarget('admin/**', 'admin-handler')
+    matcher.addTarget('logs/**/error', 'error-handler')
+    matcher.prependTarget('api/users/:id', 'priority-user-handler')
+
+    // Test initial state
+    assertEquals(matcher.targetsCount, 7, 'Should have 7 targets initially')
+    assertEquals(matcher.matchers.length, 4, 'Should have 4 unique matchers initially')
+
+    let userResults = matcher.match('api/users/123')
+    let postResults = matcher.match('api/posts/new')
+    let adminResults = matcher.match('admin/settings')
+    let errorResults = matcher.match('logs/app/critical/error')
+
+    assertEquals(userResults.length, 3, 'Should have 3 user handlers initially')
+    assertEquals(postResults.length, 2, 'Should have 2 post handlers initially')
+    assertEquals(adminResults.length, 1, 'Should have 1 admin handler initially')
+    assertEquals(errorResults.length, 1, 'Should have 1 error handler initially')
+
+    // Remove all targets from a single matcher
+    matcher.removeAllTargets('api/users/:id')
+
+    assertEquals(matcher.targetsCount, 4, 'Should have 4 targets after removing from one matcher')
+    assertEquals(matcher.matchers.length, 3, 'Should have 3 matchers after removal')
+
+    userResults = matcher.match('api/users/456')
+    postResults = matcher.match('api/posts/update')
+    adminResults = matcher.match('admin/config')
+    errorResults = matcher.match('logs/system/error')
+
+    assertEquals(userResults.length, 0, 'Should have no user handlers after removal')
+    assertEquals(postResults.length, 2, 'Should still have 2 post handlers')
+    assertEquals(adminResults.length, 1, 'Should still have 1 admin handler')
+    assertEquals(errorResults.length, 1, 'Should still have 1 error handler')
+
+    // Remove all targets from multiple matchers
+    matcher.removeAllTargets(['api/posts/*', 'logs/**/error'])
+
+    assertEquals(matcher.targetsCount, 1, 'Should have 1 target after removing from multiple matchers')
+    assertEquals(matcher.matchers.length, 1, 'Should have 1 matcher after removal')
+
+    userResults = matcher.match('api/users/789')
+    postResults = matcher.match('api/posts/delete')
+    adminResults = matcher.match('admin/users')
+    errorResults = matcher.match('logs/database/error')
+
+    assertEquals(userResults.length, 0, 'Should have no user handlers')
+    assertEquals(postResults.length, 0, 'Should have no post handlers after removal')
+    assertEquals(adminResults.length, 1, 'Should still have 1 admin handler')
+    assertEquals(errorResults.length, 0, 'Should have no error handlers after removal')
+
+    // Verify only admin handler remains
+    assertEquals(matcher.matchers[0], 'admin/**', 'Should only have admin matcher remaining')
+    assertEquals(matcher.targets[0], 'admin-handler', 'Should only have admin-handler remaining')
+  })
+
+  // Test removeAllTargets with specific matchers - static mode
+  await runTest('removeAllTargets with specific matchers - static mode', () => {
+    const matcher = new PathMatcher<string>() // Static mode
+
+    // Add targets to various matchers
+    matcher.addTarget('static/path1', 'handler-1a')
+    matcher.addTarget('static/path1', 'handler-1b')
+    matcher.addTarget('static/path2', 'handler-2a')
+    matcher.addTarget('static/path2', 'handler-2b')
+    matcher.addTarget('static/path3', 'handler-3')
+    matcher.prependTarget('static/path1', 'priority-handler-1')
+
+    // Test initial state
+    assertEquals(matcher.targetsCount, 6, 'Should have 6 targets initially')
+    assertEquals(matcher.matchers.length, 3, 'Should have 3 unique matchers initially')
+
+    let path1Results = matcher.match('static/path1')
+    let path2Results = matcher.match('static/path2')
+    let path3Results = matcher.match('static/path3')
+
+    assertEquals(path1Results.length, 3, 'Should have 3 handlers for path1 initially')
+    assertEquals(path2Results.length, 2, 'Should have 2 handlers for path2 initially')
+    assertEquals(path3Results.length, 1, 'Should have 1 handler for path3 initially')
+
+    // Remove all targets from a single matcher
+    matcher.removeAllTargets('static/path1')
+
+    assertEquals(matcher.targetsCount, 3, 'Should have 3 targets after removing from one matcher')
+    assertEquals(matcher.matchers.length, 2, 'Should have 2 matchers after removal')
+
+    path1Results = matcher.match('static/path1')
+    path2Results = matcher.match('static/path2')
+    path3Results = matcher.match('static/path3')
+
+    assertEquals(path1Results.length, 0, 'Should have no handlers for path1 after removal')
+    assertEquals(path2Results.length, 2, 'Should still have 2 handlers for path2')
+    assertEquals(path3Results.length, 1, 'Should still have 1 handler for path3')
+
+    // Remove all targets from multiple matchers
+    matcher.removeAllTargets(['static/path2', 'static/path3'])
+
+    assertEquals(matcher.targetsCount, 0, 'Should have 0 targets after removing from multiple matchers')
+    assertEquals(matcher.matchers.length, 0, 'Should have 0 matchers after removal')
+
+    path1Results = matcher.match('static/path1')
+    path2Results = matcher.match('static/path2')
+    path3Results = matcher.match('static/path3')
+
+    assertEquals(path1Results.length, 0, 'Should have no handlers for path1')
+    assertEquals(path2Results.length, 0, 'Should have no handlers for path2 after removal')
+    assertEquals(path3Results.length, 0, 'Should have no handlers for path3 after removal')
+  })
+
+  // Test removeAllTargets with non-existent matchers
+  await runTest('removeAllTargets with non-existent matchers', () => {
+    const matcher = new PathMatcher<string>({ useWildcards: true, useParams: true })
+
+    // Add some targets
+    matcher.addTarget('api/users', 'user-handler')
+    matcher.addTarget('api/posts', 'post-handler')
+
+    assertEquals(matcher.targetsCount, 2, 'Should have 2 targets initially')
+
+    // Try to remove from non-existent matchers
+    matcher.removeAllTargets('non-existent/matcher')
+    matcher.removeAllTargets(['another-non-existent', 'also-fake'])
+
+    // Should not affect existing targets
+    assertEquals(matcher.targetsCount, 2, 'Should still have 2 targets after non-existent removal')
+    assertEquals(matcher.matchers.length, 2, 'Should still have 2 matchers')
+
+    const userResults = matcher.match('api/users')
+    const postResults = matcher.match('api/posts')
+
+    assertEquals(userResults.length, 1, 'Should still have user handler')
+    assertEquals(postResults.length, 1, 'Should still have post handler')
+
+    // Mix of existing and non-existent matchers
+    matcher.removeAllTargets(['api/users', 'fake-matcher', 'api/posts'])
+
+    assertEquals(matcher.targetsCount, 0, 'Should have 0 targets after mixed removal')
+    assertEquals(matcher.matchers.length, 0, 'Should have 0 matchers after mixed removal')
+  })
+
+  // Test removeAllTargets with empty array
+  await runTest('removeAllTargets with empty array', () => {
+    const matcher = new PathMatcher<string>({ useWildcards: true })
+
+    matcher.addTarget('test/path', 'test-handler')
+
+    // Test with empty array - should do nothing
+    matcher.removeAllTargets([])
+
+    const results = matcher.match('test/path')
+    assertEquals(results.length, 1, 'Should still have the handler after empty array removal')
+    assertEquals(results[0].target, 'test-handler', 'Should still match test-handler')
+    assertEquals(matcher.targetsCount, 1, 'Should still have 1 target')
+  })
+
+  // Test removeAllTargets preserves other matchers when removing specific ones
+  await runTest('removeAllTargets preserves other matchers', () => {
+    const matcher = new PathMatcher<string>({ useWildcards: true, useParams: true })
+
+    // Add targets with various match types
+    matcher.addTarget('api/users/:id', 'user-param-handler')
+    matcher.addTarget('api/posts/*', 'post-wildcard-handler')
+    matcher.addTarget('admin/**', 'admin-globstar-handler')
+    matcher.addTarget('static/path', 'static-handler')
+    matcher.addTargetOnce('temp/resource', 'temp-handler')
+    matcher.addTargetMany('limited/resource', 2, 'limited-handler')
+
+    assertEquals(matcher.targetsCount, 6, 'Should have 6 targets initially')
+
+    // Remove targets from specific matchers only
+    matcher.removeAllTargets(['api/users/:id', 'temp/resource'])
+
+    assertEquals(matcher.targetsCount, 4, 'Should have 4 targets after specific removal')
+
+    // Verify specific matchers were removed
+    const userResults = matcher.match('api/users/123')
+    const tempResults = matcher.match('temp/resource')
+    assertEquals(userResults.length, 0, 'Should have no user handlers')
+    assertEquals(tempResults.length, 0, 'Should have no temp handlers')
+
+    // Verify other matchers are preserved
+    const postResults = matcher.match('api/posts/new')
+    const adminResults = matcher.match('admin/settings')
+    const staticResults = matcher.match('static/path')
+    const limitedResults = matcher.match('limited/resource')
+
+    assertEquals(postResults.length, 1, 'Should still have post handler')
+    assertEquals(adminResults.length, 1, 'Should still have admin handler')
+    assertEquals(staticResults.length, 1, 'Should still have static handler')
+    assertEquals(limitedResults.length, 1, 'Should still have limited handler')
+
+    assertEquals(postResults[0].target, 'post-wildcard-handler', 'Should match post handler')
+    assertEquals(adminResults[0].target, 'admin-globstar-handler', 'Should match admin handler')
+    assertEquals(staticResults[0].target, 'static-handler', 'Should match static handler')
+    assertEquals(limitedResults[0].target, 'limited-handler', 'Should match limited handler')
+  })
+
   console.log('\n✅ All Remove Targets tests completed!')
 }
