@@ -101,6 +101,39 @@ console.log(matcher.matchers) // ['api/users', 'api/posts']
 
 ### Instance Methods
 
+#### getTargetsCount
+
+```ts
+getTargetsCount(matcher?: string): number
+```
+
+Returns the number of registered targets for a specific matcher pattern, or the total count if no matcher is specified. When called without arguments, it returns the same value as the `targetsCount` getter.
+
+```ts
+const matcher = new PathMatcher<string>()
+matcher.addTarget('api/users', 'handler1')
+matcher.addTarget('api/users', 'handler2')
+matcher.addTarget('api/posts', 'handler3')
+
+// Get total count (same as targetsCount getter)
+console.log(matcher.getTargetsCount()) // 3
+
+// Get count for specific matcher
+console.log(matcher.getTargetsCount('api/users')) // 2
+console.log(matcher.getTargetsCount('api/posts')) // 1
+console.log(matcher.getTargetsCount('api/comments')) // 0 (non-existent)
+
+// Works with all matcher types
+const wildcardMatcher = new PathMatcher<string>({ useWildcards: true, useParams: true })
+wildcardMatcher.addTarget('user/:id/*', 'handler1')
+wildcardMatcher.addTarget('user/:id/*', 'handler2')
+wildcardMatcher.addTarget('admin/**', 'handler3')
+
+console.log(wildcardMatcher.getTargetsCount('user/:id/*')) // 2
+console.log(wildcardMatcher.getTargetsCount('admin/**')) // 1
+console.log(wildcardMatcher.getTargetsCount()) // 3
+```
+
 #### addTarget
 
 ```ts
@@ -537,6 +570,11 @@ console.log('Registered matchers:', router.matchers)
 console.log('All targets:', router.targets)
 // All targets: [authMiddleware, getUserHandler, getAllUsersHandler, adminHandler]
 
+// Get detailed target counts per matcher
+console.log(`Targets for 'api/users/:id': ${router.getTargetsCount('api/users/:id')}`) // 1
+console.log(`Targets for 'api/*': ${router.getTargetsCount('api/*')}`) // 1
+console.log(`Targets for 'admin/**': ${router.getTargetsCount('admin/**')}`) // 1
+
 // Check if specific matchers exist
 const requiredRoutes = ['api/users/:id', 'api/users', 'admin/**']
 if (router.hasMatchers(requiredRoutes)) {
@@ -551,6 +589,22 @@ if (!router.hasMatchers(optionalRoutes)) {
   router.addTarget('api/analytics', analyticsHandler)
   router.addTarget('api/reports', reportsHandler)
   console.log(`Added missing routes. New total: ${router.targetsCount}`)
+}
+
+// Monitor handler distribution and add load balancing
+function ensureLoadBalancing() {
+  const criticalRoutes = ['api/users/:id', 'api/posts/:id', 'api/orders/:id']
+  
+  for (const route of criticalRoutes) {
+    const currentCount = router.getTargetsCount(route)
+    console.log(`Route '${route}' has ${currentCount} handlers`)
+    
+    // Add more handlers if route is under-served
+    if (currentCount < 2) {
+      router.addTarget(route, createLoadBalancedHandler())
+      console.log(`Added load balancer to ${route}`)
+    }
+  }
 }
 
 // Bulk removal operations

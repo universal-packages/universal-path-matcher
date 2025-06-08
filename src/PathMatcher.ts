@@ -62,6 +62,26 @@ export class PathMatcher<PathTarget = any> {
     return Array.from(uniqueMatchers)
   }
 
+  /**
+   * Get the number of registered targets for a specific matcher, or total count if no matcher specified
+   * @param matcher - Optional matcher pattern to count targets for
+   * @returns The number of targets for the specified matcher, or total count if no matcher provided
+   */
+  public getTargetsCount(matcher?: string): number {
+    if (matcher === undefined) {
+      return this.targetsCount
+    }
+
+    if (!this.options.useWildcards && !this.options.useParams) {
+      // Use optimized path for static matching
+      const targetRecords = this._targetsMap.get(matcher)
+      return targetRecords ? targetRecords.length : 0
+    }
+
+    // Advanced mode - count targets for specific matcher
+    return this._allTargets.filter((record) => record.matcher === matcher).length
+  }
+
   public constructor(options?: PathMatcherOptions) {
     this.options = {
       levelDelimiter: options?.levelDelimiter ?? '/',
