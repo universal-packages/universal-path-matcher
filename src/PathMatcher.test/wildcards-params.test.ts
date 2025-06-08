@@ -152,5 +152,243 @@ export async function runWildcardsParamsTests() {
     assertEquals(results.length, 0, 'Should not match with different delimiter')
   })
 
+  await runTest('wildcard for boolean targets', () => {
+    const matcher = new PathMatcher<boolean>({ useWildcards: true })
+
+    matcher.addTarget('user/*', true)
+    matcher.addTarget('user/admin', false)
+    matcher.addTarget('user/guest', false)
+
+    const results1 = matcher.match('user/admin')
+    assertEquals(results1.length, 2, 'Should match 2 targets')
+    assertEquals(results1[0].target, false, 'Should match user/admin')
+    assertEquals(results1[1].target, true, 'Should match user/*')
+
+    const results2 = matcher.match('user/guest')
+    assertEquals(results2.length, 2, 'Should match 2 targets')
+    assertEquals(results2[0].target, false, 'Should match user/guest')
+    assertEquals(results2[1].target, true, 'Should match user/*')
+
+    const results3 = matcher.match('user/*')
+    assertEquals(results3.length, 3, 'Should match 3 targets')
+    assertEquals(results3[0].target, true, 'Should match user/*')
+    assertEquals(results3[1].target, false, 'Should match user/admin')
+    assertEquals(results3[2].target, false, 'Should match user/guest')
+
+    const results4 = matcher.match('*')
+    assertEquals(results4.length, 0, 'Should not match since is a 1 level wildcard')
+
+    const results5 = matcher.match('**')
+    assertEquals(results5.length, 3, 'Should match 3 targets')
+    assertEquals(results5[0].target, true, 'Should match user/*')
+    assertEquals(results5[1].target, false, 'Should match user/admin')
+    assertEquals(results5[2].target, false, 'Should match user/guest')
+  })
+
+  await runTest('wildcard for arrow functions', () => {
+    const matcher = new PathMatcher<() => void>({ useWildcards: true })
+
+    matcher.addTarget('user/*', () => {})
+    matcher.addTarget('user/admin', () => {})
+    matcher.addTarget('user/guest', () => {})
+
+    const results1 = matcher.match('user/admin')
+    assertEquals(results1.length, 2, 'Should match 2 targets')
+
+    const results2 = matcher.match('user/guest')
+    assertEquals(results2.length, 2, 'Should match 2 targets')
+
+    const results3 = matcher.match('user/*')
+    assertEquals(results3.length, 3, 'Should match 3 targets')
+
+    const results4 = matcher.match('*')
+    assertEquals(results4.length, 0, 'Should not match since is a 1 level wildcard')
+
+    const results5 = matcher.match('**')
+    assertEquals(results5.length, 3, 'Should match 3 targets')
+  })
+
+  await runTest('wildcard for async arrow functions', () => {
+    const matcher = new PathMatcher<() => Promise<void>>({ useWildcards: true })
+
+    matcher.addTarget('user/*', () => Promise.resolve())
+    matcher.addTarget('user/admin', () => Promise.resolve())
+    matcher.addTarget('user/guest', () => Promise.resolve())
+
+    const results1 = matcher.match('user/admin')
+    assertEquals(results1.length, 2, 'Should match 2 targets')
+
+    const results2 = matcher.match('user/guest')
+    assertEquals(results2.length, 2, 'Should match 2 targets')
+
+    const results3 = matcher.match('user/*')
+    assertEquals(results3.length, 3, 'Should match 3 targets')
+
+    const results4 = matcher.match('*')
+    assertEquals(results4.length, 0, 'Should not match since is a 1 level wildcard')
+
+    const results5 = matcher.match('**')
+    assertEquals(results5.length, 3, 'Should match 3 targets')
+  })
+
+  await runTest('wildcard for named functions', () => {
+    const matcher = new PathMatcher<Function>({ useWildcards: true })
+
+    matcher.addTarget('user/*', () => {})
+    matcher.addTarget('user/admin', () => {})
+    matcher.addTarget('user/guest', () => {})
+
+    const results1 = matcher.match('user/admin')
+    assertEquals(results1.length, 2, 'Should match 2 targets')
+
+    const results2 = matcher.match('user/guest')
+    assertEquals(results2.length, 2, 'Should match 2 targets')
+
+    const results3 = matcher.match('user/*')
+    assertEquals(results3.length, 3, 'Should match 3 targets')
+
+    const results4 = matcher.match('*')
+    assertEquals(results4.length, 0, 'Should not match since is a 1 level wildcard')
+
+    const results5 = matcher.match('**')
+    assertEquals(results5.length, 3, 'Should match 3 targets')
+  })
+
+  await runTest('wildcard for class constructor', () => {
+    class TestClass {
+      constructor(public value: string) {}
+      getValue() {
+        return this.value
+      }
+    }
+    class TestClass2 extends TestClass {}
+    class TestClass3 extends TestClass {}
+
+    const matcher = new PathMatcher<typeof TestClass>({ useWildcards: true })
+
+    matcher.addTarget('user/*', TestClass)
+    matcher.addTarget('user/admin', TestClass2)
+    matcher.addTarget('user/guest', TestClass3)
+
+    const results1 = matcher.match('user/admin')
+    assertEquals(results1.length, 2, 'Should match 2 targets')
+    assertEquals(results1[0].target, TestClass2, 'Should match user/admin')
+    assertEquals(results1[1].target, TestClass, 'Should match user/*')
+
+    const results2 = matcher.match('user/guest')
+    assertEquals(results2.length, 2, 'Should match 2 targets')
+    assertEquals(results2[0].target, TestClass3, 'Should match user/guest')
+    assertEquals(results2[1].target, TestClass, 'Should match user/*')
+
+    const results3 = matcher.match('user/*')
+    assertEquals(results3.length, 3, 'Should match 3 targets')
+
+    const results4 = matcher.match('*')
+    assertEquals(results4.length, 0, 'Should not match since is a 1 level wildcard')
+
+    const results5 = matcher.match('**')
+    assertEquals(results5.length, 3, 'Should match 3 targets')
+  })
+
+  await runTest('wildcard for class instances', () => {
+    class TestClass {
+      constructor(public value: string) {}
+      getValue() {
+        return this.value
+      }
+    }
+
+    const instance1 = new TestClass('user-wildcard-handler')
+    const instance2 = new TestClass('user-admin-handler')
+    const instance3 = new TestClass('user-guest-handler')
+
+    const matcher = new PathMatcher<TestClass>({ useWildcards: true })
+
+    matcher.addTarget('user/*', instance1)
+    matcher.addTarget('user/admin', instance2)
+    matcher.addTarget('user/guest', instance3)
+
+    const results1 = matcher.match('user/admin')
+    assertEquals(results1.length, 2, 'Should match 2 targets')
+    assertEquals(results1[0].target, instance2, 'Should match user/admin')
+    assertEquals(results1[1].target, instance1, 'Should match user/*')
+
+    const results2 = matcher.match('user/guest')
+    assertEquals(results2.length, 2, 'Should match 2 targets')
+    assertEquals(results2[0].target, instance3, 'Should match user/guest')
+    assertEquals(results2[1].target, instance1, 'Should match user/*')
+
+    const results3 = matcher.match('user/*')
+    assertEquals(results3.length, 3, 'Should match 3 targets')
+    assertEquals(results3[0].target, instance1, 'Should match user/*')
+    assertEquals(results3[1].target, instance2, 'Should match user/admin')
+    assertEquals(results3[2].target, instance3, 'Should match user/guest')
+
+    const results4 = matcher.match('*')
+    assertEquals(results4.length, 0, 'Should not match since is a 1 level wildcard')
+
+    const results5 = matcher.match('**')
+    assertEquals(results5.length, 3, 'Should match 3 targets')
+    assertEquals(results5[0].target, instance1, 'Should match user/*')
+    assertEquals(results5[1].target, instance2, 'Should match user/admin')
+    assertEquals(results5[2].target, instance3, 'Should match user/guest')
+  })
+
+  await runTest('wildcard for class instances with params', () => {
+    const pathMatcher = new PathMatcher<() => any>({ useWildcards: true, levelDelimiter: ':' })
+
+    const captured: string[] = []
+
+    pathMatcher.addTarget('user:admin', () => {
+      captured.push('user:admin')
+    })
+    pathMatcher.addTarget('user:guest', () => {
+      captured.push('user:guest')
+    })
+    pathMatcher.addTarget('user:*', () => {
+      captured.push('user:*')
+    })
+
+    const results1 = pathMatcher.match('user:admin')
+    for (const result of results1) {
+      result.target()
+    }
+
+    assertEquals(results1.length, 2, 'Should match 2 targets')
+    assertEquals(captured[0], 'user:admin', 'Should match user:admin')
+    assertEquals(captured[1], 'user:*', 'Should match user:*')
+
+    captured.length = 0
+
+    const results2 = pathMatcher.match('user:guest')
+    for (const result of results2) {
+      result.target()
+    }
+    assertEquals(results2.length, 2, 'Should match 2 targets')
+    assertEquals(captured[0], 'user:guest', 'Should match user:guest')
+    assertEquals(captured[1], 'user:*', 'Should match user:*')
+
+    captured.length = 0
+
+    const results3 = pathMatcher.match('user:*')
+    for (const result of results3) {
+      result.target()
+    }
+
+    assertEquals(results3.length, 3, 'Should match 3 targets')
+    assertEquals(captured[0], 'user:admin', 'Should match user:admin')
+    assertEquals(captured[1], 'user:guest', 'Should match user:guest')
+    assertEquals(captured[2], 'user:*', 'Should match user:*')
+
+    captured.length = 0
+
+    const results4 = pathMatcher.match('*')
+    for (const result of results4) {
+      result.target()
+    }
+
+    assertEquals(results4.length, 0, 'Should not match since is a 1 level wildcard')
+  })
+
   console.log('\n✅ All Wildcards & Params tests completed!')
 }
