@@ -32,6 +32,11 @@ export interface PathTargetResult<PathTarget = any> {
   params?: Record<string, string>
 }
 
+export interface GetTargetsResult<PathTarget = any> {
+  matcher: string
+  target: PathTarget
+}
+
 // New interfaces for advanced matching
 export interface ParsedSegment {
   type: 'static' | 'wildcard' | 'globstar' | 'param'

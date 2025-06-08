@@ -386,5 +386,265 @@ export async function runGettersMethodsTests() {
     assertEquals(matcher.hasMatchers(['']), true, 'Should recognize empty string matcher')
   })
 
+  // Test getTargets method in static mode
+  await runTest('getTargets method - no arguments (static mode)', () => {
+    const matcher = new PathMatcher<string>()
+    matcher.addTarget('api/users', 'handler1')
+    matcher.addTarget('api/users', 'handler2')
+    matcher.addTarget('api/posts', 'handler3')
+
+    const results = matcher.getTargets()
+    assertEquals(results.length, 3, 'Should return all targets with their matchers')
+
+    // Check that all targets are included with correct matchers
+    const userTargets = results.filter((r) => r.matcher === 'api/users')
+    const postTargets = results.filter((r) => r.matcher === 'api/posts')
+
+    assertEquals(userTargets.length, 2, 'Should have 2 user targets')
+    assertEquals(postTargets.length, 1, 'Should have 1 post target')
+
+    assert(
+      userTargets.some((r) => r.target === 'handler1'),
+      'Should contain handler1 for api/users'
+    )
+    assert(
+      userTargets.some((r) => r.target === 'handler2'),
+      'Should contain handler2 for api/users'
+    )
+    assert(
+      postTargets.some((r) => r.target === 'handler3'),
+      'Should contain handler3 for api/posts'
+    )
+  })
+
+  await runTest('getTargets method - specific matcher (static mode)', () => {
+    const matcher = new PathMatcher<string>()
+    matcher.addTarget('api/users', 'handler1')
+    matcher.addTarget('api/users', 'handler2')
+    matcher.addTarget('api/posts', 'handler3')
+
+    const userTargets = matcher.getTargets('api/users')
+    assertEquals(userTargets.length, 2, 'Should return 2 targets for api/users')
+    assertEquals(userTargets[0].matcher, 'api/users', 'First result should have correct matcher')
+    assertEquals(userTargets[1].matcher, 'api/users', 'Second result should have correct matcher')
+    assert(
+      userTargets.some((r) => r.target === 'handler1'),
+      'Should contain handler1'
+    )
+    assert(
+      userTargets.some((r) => r.target === 'handler2'),
+      'Should contain handler2'
+    )
+
+    const postTargets = matcher.getTargets('api/posts')
+    assertEquals(postTargets.length, 1, 'Should return 1 target for api/posts')
+    assertEquals(postTargets[0].matcher, 'api/posts', 'Result should have correct matcher')
+    assertEquals(postTargets[0].target, 'handler3', 'Should contain handler3')
+
+    const emptyTargets = matcher.getTargets('api/comments')
+    assertEquals(emptyTargets.length, 0, 'Should return empty array for non-existent matcher')
+  })
+
+  await runTest('getTargets method - empty matcher string (static mode)', () => {
+    const matcher = new PathMatcher<string>()
+    matcher.addTarget('', 'root-handler1')
+    matcher.addTarget('', 'root-handler2')
+    matcher.addTarget('api', 'api-handler')
+
+    const rootTargets = matcher.getTargets('')
+    assertEquals(rootTargets.length, 2, 'Should return 2 targets for empty matcher')
+    assertEquals(rootTargets[0].matcher, '', 'Should have empty string matcher')
+    assertEquals(rootTargets[1].matcher, '', 'Should have empty string matcher')
+    assert(
+      rootTargets.some((r) => r.target === 'root-handler1'),
+      'Should contain root-handler1'
+    )
+    assert(
+      rootTargets.some((r) => r.target === 'root-handler2'),
+      'Should contain root-handler2'
+    )
+  })
+
+  await runTest('getTargets method - preserve order with prepend (static mode)', () => {
+    const matcher = new PathMatcher<string>()
+    matcher.addTarget('api/data', 'handler1')
+    matcher.prependTarget('api/data', 'handler0')
+    matcher.addTarget('api/data', 'handler2')
+
+    const targets = matcher.getTargets('api/data')
+    assertEquals(targets.length, 3, 'Should return all 3 targets')
+    assertEquals(targets[0].target, 'handler0', 'First should be prepended target')
+    assertEquals(targets[1].target, 'handler1', 'Second should be original first target')
+    assertEquals(targets[2].target, 'handler2', 'Third should be last added target')
+
+    // All should have the same matcher
+    targets.forEach((target) => {
+      assertEquals(target.matcher, 'api/data', 'All targets should have correct matcher')
+    })
+  })
+
+  await runTest('getTargets method - after target removal (static mode)', () => {
+    const matcher = new PathMatcher<string>()
+    matcher.addTarget('api/users', 'handler1')
+    matcher.addTarget('api/users', 'handler2')
+    matcher.addTarget('api/posts', 'handler3')
+
+    // Before removal
+    let targets = matcher.getTargets('api/users')
+    assertEquals(targets.length, 2, 'Should have 2 targets initially')
+
+    // After removing one target
+    matcher.removeTarget('api/users', 'handler1')
+    targets = matcher.getTargets('api/users')
+    assertEquals(targets.length, 1, 'Should have 1 target after removal')
+    assertEquals(targets[0].target, 'handler2', 'Should contain the remaining target')
+
+    // After removing all targets from matcher
+    matcher.removeTarget('api/users', 'handler2')
+    targets = matcher.getTargets('api/users')
+    assertEquals(targets.length, 0, 'Should have no targets after removing all')
+  })
+
+  // Test getTargets method in advanced mode (wildcards)
+  await runTest('getTargets method - wildcard mode', () => {
+    const matcher = new PathMatcher<string>({ useWildcards: true })
+    matcher.addTarget('api/*', 'wildcard-handler1')
+    matcher.addTarget('api/*', 'wildcard-handler2')
+    matcher.addTarget('admin/**', 'globstar-handler')
+
+    // Get all targets
+    const allTargets = matcher.getTargets()
+    assertEquals(allTargets.length, 3, 'Should return all 3 targets')
+
+    const apiTargets = allTargets.filter((r) => r.matcher === 'api/*')
+    const adminTargets = allTargets.filter((r) => r.matcher === 'admin/**')
+
+    assertEquals(apiTargets.length, 2, 'Should have 2 api/* targets')
+    assertEquals(adminTargets.length, 1, 'Should have 1 admin/** target')
+
+    // Get specific matcher targets
+    const specificApiTargets = matcher.getTargets('api/*')
+    assertEquals(specificApiTargets.length, 2, 'Should return 2 targets for api/*')
+    assert(
+      specificApiTargets.every((r) => r.matcher === 'api/*'),
+      'All should have api/* matcher'
+    )
+
+    const specificAdminTargets = matcher.getTargets('admin/**')
+    assertEquals(specificAdminTargets.length, 1, 'Should return 1 target for admin/**')
+    assertEquals(specificAdminTargets[0].matcher, 'admin/**', 'Should have admin/** matcher')
+  })
+
+  // Test getTargets method in advanced mode (params)
+  await runTest('getTargets method - params mode', () => {
+    const matcher = new PathMatcher<string>({ useParams: true })
+    matcher.addTarget('user/:id', 'user-handler1')
+    matcher.addTarget('user/:id', 'user-handler2')
+    matcher.addTarget('api/:version/users/:userId', 'api-handler')
+
+    // Get all targets
+    const allTargets = matcher.getTargets()
+    assertEquals(allTargets.length, 3, 'Should return all 3 targets')
+
+    // Get specific param matcher targets
+    const userTargets = matcher.getTargets('user/:id')
+    assertEquals(userTargets.length, 2, 'Should return 2 targets for user/:id')
+    assert(
+      userTargets.every((r) => r.matcher === 'user/:id'),
+      'All should have user/:id matcher'
+    )
+
+    const apiTargets = matcher.getTargets('api/:version/users/:userId')
+    assertEquals(apiTargets.length, 1, 'Should return 1 target for complex param matcher')
+    assertEquals(apiTargets[0].matcher, 'api/:version/users/:userId', 'Should have correct complex matcher')
+
+    // Non-existent param pattern
+    const nonExistentTargets = matcher.getTargets('user/:otherId')
+    assertEquals(nonExistentTargets.length, 0, 'Should return 0 for different param name')
+  })
+
+  // Test getTargets method in combined mode
+  await runTest('getTargets method - combined wildcards and params', () => {
+    const matcher = new PathMatcher<string>({ useWildcards: true, useParams: true })
+    matcher.addTarget('user/:id/*', 'user-wildcard1')
+    matcher.addTarget('user/:id/*', 'user-wildcard2')
+    matcher.addTarget('*/users/:userId', 'namespace-user')
+    matcher.addTarget('admin/**', 'admin-all')
+
+    // Get all targets
+    const allTargets = matcher.getTargets()
+    assertEquals(allTargets.length, 4, 'Should return all 4 targets')
+
+    // Verify different matcher patterns exist
+    const matchers = new Set(allTargets.map((r) => r.matcher))
+    assertEquals(matchers.size, 3, 'Should have 3 unique matchers')
+    assert(matchers.has('user/:id/*'), 'Should include user/:id/* matcher')
+    assert(matchers.has('*/users/:userId'), 'Should include */users/:userId matcher')
+    assert(matchers.has('admin/**'), 'Should include admin/** matcher')
+
+    // Get specific combined pattern targets
+    const userWildcardTargets = matcher.getTargets('user/:id/*')
+    assertEquals(userWildcardTargets.length, 2, 'Should return 2 targets for user/:id/*')
+    assert(
+      userWildcardTargets.every((r) => r.matcher === 'user/:id/*'),
+      'All should have user/:id/* matcher'
+    )
+  })
+
+  // Test cross-mode consistency for getTargets
+  await runTest('getTargets method - cross-mode consistency', () => {
+    // Static mode
+    const staticMatcher = new PathMatcher<string>()
+    staticMatcher.addTarget('api/users', 'handler1')
+    staticMatcher.addTarget('api/users', 'handler2')
+    staticMatcher.addTarget('api/posts', 'handler3')
+
+    // Advanced mode with same patterns
+    const advancedMatcher = new PathMatcher<string>({ useWildcards: true })
+    advancedMatcher.addTarget('api/users', 'handler1')
+    advancedMatcher.addTarget('api/users', 'handler2')
+    advancedMatcher.addTarget('api/posts', 'handler3')
+
+    const staticAllTargets = staticMatcher.getTargets()
+    const advancedAllTargets = advancedMatcher.getTargets()
+
+    assertEquals(staticAllTargets.length, advancedAllTargets.length, 'Should have same number of targets')
+
+    const staticUserTargets = staticMatcher.getTargets('api/users')
+    const advancedUserTargets = advancedMatcher.getTargets('api/users')
+
+    assertEquals(staticUserTargets.length, advancedUserTargets.length, 'Should have same number of user targets')
+    assertEquals(staticUserTargets.length, 2, 'Both should have 2 user targets')
+
+    // Check that targets and matchers match
+    staticUserTargets.forEach((staticTarget, index) => {
+      assertEquals(staticTarget.matcher, advancedUserTargets[index].matcher, 'Matchers should match')
+      assertEquals(staticTarget.target, advancedUserTargets[index].target, 'Targets should match')
+    })
+  })
+
+  await runTest('getTargets method - limited targets behavior', () => {
+    const matcher = new PathMatcher<string>()
+    matcher.addTargetOnce('api/temp', 'temp-handler')
+    matcher.addTargetMany('api/temp', 2, 'limited-handler')
+    matcher.addTarget('api/temp', 'regular-handler')
+
+    // Before any matches - should show all targets
+    let targets = matcher.getTargets('api/temp')
+    assertEquals(targets.length, 3, 'Should show all targets initially')
+
+    // Match once - should remove the once target
+    matcher.match('api/temp')
+    targets = matcher.getTargets('api/temp')
+    assertEquals(targets.length, 2, 'Should have 2 targets after once target consumed')
+
+    // Match twice more - should remove the many target
+    matcher.match('api/temp')
+    matcher.match('api/temp')
+    targets = matcher.getTargets('api/temp')
+    assertEquals(targets.length, 1, 'Should have 1 target after limited targets consumed')
+    assertEquals(targets[0].target, 'regular-handler', 'Should only have the regular handler remaining')
+  })
+
   console.log('\n✅ All Getters and Methods tests completed!')
 }

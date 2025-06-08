@@ -1,4 +1,4 @@
-import { AdvancedTargetRecord, ParsedMatcher, ParsedSegment, PathMatcherOptions, PathTargetResult, TargetRecord, TrieNode } from './PatchMatcher.types'
+import { AdvancedTargetRecord, GetTargetsResult, ParsedMatcher, ParsedSegment, PathMatcherOptions, PathTargetResult, TargetRecord, TrieNode } from './PatchMatcher.types'
 
 export class PathMatcher<PathTarget = any> {
   public readonly options: PathMatcherOptions
@@ -80,6 +80,52 @@ export class PathMatcher<PathTarget = any> {
 
     // Advanced mode - count targets for specific matcher
     return this._allTargets.filter((record) => record.matcher === matcher).length
+  }
+
+  /**
+   * Get targets registered for a specific matcher, or all targets with their matchers if no matcher specified
+   * @param matcher - Optional matcher pattern to get targets for
+   * @returns Array of GetTargetsResult objects containing matcher and target pairs
+   */
+  public getTargets(matcher?: string): GetTargetsResult<PathTarget>[] {
+    if (matcher === undefined) {
+      // Return all targets with their matchers
+      if (!this.options.useWildcards && !this.options.useParams) {
+        const results: GetTargetsResult<PathTarget>[] = []
+        for (const [matcherKey, targetRecords] of this._targetsMap.entries()) {
+          for (const record of targetRecords) {
+            results.push({ matcher: matcherKey, target: record.target })
+          }
+        }
+        return results
+      }
+
+      // Advanced mode - return all targets with their matchers
+      return this._allTargets.map((record) => ({
+        matcher: record.matcher,
+        target: record.target
+      }))
+    }
+
+    // Return targets for specific matcher
+    if (!this.options.useWildcards && !this.options.useParams) {
+      // Use optimized path for static matching
+      const targetRecords = this._targetsMap.get(matcher)
+      if (!targetRecords) return []
+
+      return targetRecords.map((record) => ({
+        matcher: matcher,
+        target: record.target
+      }))
+    }
+
+    // Advanced mode - filter targets for specific matcher
+    return this._allTargets
+      .filter((record) => record.matcher === matcher)
+      .map((record) => ({
+        matcher: record.matcher,
+        target: record.target
+      }))
   }
 
   public constructor(options?: PathMatcherOptions) {

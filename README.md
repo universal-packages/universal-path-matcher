@@ -134,6 +134,66 @@ console.log(wildcardMatcher.getTargetsCount('admin/**')) // 1
 console.log(wildcardMatcher.getTargetsCount()) // 3
 ```
 
+#### getTargets
+
+```ts
+getTargets(matcher?: string): GetTargetsResult<PathTarget>[]
+```
+
+Returns targets registered for a specific matcher pattern, or all targets with their associated matchers if no matcher is specified. Unlike the `targets` getter, this method returns structured objects containing both the matcher and target information.
+
+```ts
+const matcher = new PathMatcher<string>()
+matcher.addTarget('api/users', 'handler1')
+matcher.addTarget('api/users', 'handler2')
+matcher.addTarget('api/posts', 'handler3')
+
+// Get all targets with their matchers
+const allTargets = matcher.getTargets()
+console.log(allTargets)
+// [
+//   { matcher: 'api/users', target: 'handler1' },
+//   { matcher: 'api/users', target: 'handler2' },
+//   { matcher: 'api/posts', target: 'handler3' }
+// ]
+
+// Get targets for specific matcher
+const userTargets = matcher.getTargets('api/users')
+console.log(userTargets)
+// [
+//   { matcher: 'api/users', target: 'handler1' },
+//   { matcher: 'api/users', target: 'handler2' }
+// ]
+
+const postTargets = matcher.getTargets('api/posts')
+console.log(postTargets) // [{ matcher: 'api/posts', target: 'handler3' }]
+
+const emptyTargets = matcher.getTargets('api/comments')
+console.log(emptyTargets) // []
+
+// Works with all matcher types
+const advancedMatcher = new PathMatcher<string>({ useWildcards: true, useParams: true })
+advancedMatcher.addTarget('user/:id/*', 'user-handler1')
+advancedMatcher.addTarget('user/:id/*', 'user-handler2')
+advancedMatcher.addTarget('admin/**', 'admin-handler')
+
+const userWildcardTargets = advancedMatcher.getTargets('user/:id/*')
+console.log(userWildcardTargets)
+// [
+//   { matcher: 'user/:id/*', target: 'user-handler1' },
+//   { matcher: 'user/:id/*', target: 'user-handler2' }
+// ]
+
+// Preserve order (prepended targets appear first)
+const orderMatcher = new PathMatcher<string>()
+orderMatcher.addTarget('api/data', 'handler1')
+orderMatcher.prependTarget('api/data', 'handler0')
+orderMatcher.addTarget('api/data', 'handler2')
+
+const orderedTargets = orderMatcher.getTargets('api/data')
+console.log(orderedTargets.map(t => t.target)) // ['handler0', 'handler1', 'handler2']
+```
+
 #### addTarget
 
 ```ts
@@ -575,6 +635,18 @@ console.log(`Targets for 'api/users/:id': ${router.getTargetsCount('api/users/:i
 console.log(`Targets for 'api/*': ${router.getTargetsCount('api/*')}`) // 1
 console.log(`Targets for 'admin/**': ${router.getTargetsCount('admin/**')}`) // 1
 
+// Get detailed targets with their matchers for analysis
+const allTargetsWithMatchers = router.getTargets()
+console.log('All registered targets with their matchers:')
+allTargetsWithMatchers.forEach(({ matcher, target }) => {
+  console.log(`  ${matcher} -> ${target.name || target}`)
+})
+
+// Get handlers for specific route patterns
+const apiHandlers = router.getTargets('api/*')
+console.log(`API handlers: ${apiHandlers.length}`)
+apiHandlers.forEach(({ target }) => console.log(`  - ${target.name || target}`))
+
 // Check if specific matchers exist
 const requiredRoutes = ['api/users/:id', 'api/users', 'admin/**']
 if (router.hasMatchers(requiredRoutes)) {
@@ -604,6 +676,40 @@ function ensureLoadBalancing() {
       router.addTarget(route, createLoadBalancedHandler())
       console.log(`Added load balancer to ${route}`)
     }
+  }
+}
+
+// Audit and analyze route handlers
+function auditRouteHandlers() {
+  const allTargetsWithMatchers = router.getTargets()
+  
+  // Group handlers by matcher for analysis
+  const handlersByMatcher = new Map<string, any[]>()
+  
+  for (const { matcher, target } of allTargetsWithMatchers) {
+    if (!handlersByMatcher.has(matcher)) {
+      handlersByMatcher.set(matcher, [])
+    }
+    handlersByMatcher.get(matcher)!.push(target)
+  }
+  
+  console.log('Route Handler Analysis:')
+  for (const [matcher, handlers] of handlersByMatcher) {
+    console.log(`  ${matcher}: ${handlers.length} handler(s)`)
+    handlers.forEach((handler, index) => {
+      console.log(`    ${index + 1}. ${handler.name || handler}`)
+    })
+  }
+  
+  // Find routes with duplicate handlers
+  const duplicateRoutes = Array.from(handlersByMatcher.entries())
+    .filter(([_, handlers]) => handlers.length > 1)
+  
+  if (duplicateRoutes.length > 0) {
+    console.log('\nRoutes with multiple handlers:')
+    duplicateRoutes.forEach(([matcher, handlers]) => {
+      console.log(`  ${matcher}: ${handlers.length} handlers`)
+    })
   }
 }
 
