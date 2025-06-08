@@ -83,11 +83,11 @@ export class PathMatcher<PathTarget = any> {
   }
 
   /**
-   * Get targets registered for a specific matcher, or all targets with their matchers if no matcher specified
-   * @param matcher - Optional matcher pattern to get targets for
+   * Get targets registered for specific matcher(s), or all targets with their matchers if no matcher specified
+   * @param matcher - Optional matcher pattern(s) to get targets for - can be a single string or array of strings
    * @returns Array of GetTargetsResult objects containing matcher and target pairs
    */
-  public getTargets(matcher?: string): GetTargetsResult<PathTarget>[] {
+  public getTargets(matcher?: string | string[]): GetTargetsResult<PathTarget>[] {
     if (matcher === undefined) {
       // Return all targets with their matchers
       if (!this.options.useWildcards && !this.options.useParams) {
@@ -107,25 +107,20 @@ export class PathMatcher<PathTarget = any> {
       }))
     }
 
-    // Return targets for specific matcher
-    if (!this.options.useWildcards && !this.options.useParams) {
-      // Use optimized path for static matching
-      const targetRecords = this._targetsMap.get(matcher)
-      if (!targetRecords) return []
+    // Handle array of matchers
+    if (Array.isArray(matcher)) {
+      const allResults: GetTargetsResult<PathTarget>[] = []
 
-      return targetRecords.map((record) => ({
-        matcher: matcher,
-        target: record.target
-      }))
+      for (const singleMatcher of matcher) {
+        const results = this._getTargetsForSingleMatcher(singleMatcher)
+        allResults.push(...results)
+      }
+
+      return allResults
     }
 
-    // Advanced mode - filter targets for specific matcher
-    return this._allTargets
-      .filter((record) => record.matcher === matcher)
-      .map((record) => ({
-        matcher: record.matcher,
-        target: record.target
-      }))
+    // Handle single matcher
+    return this._getTargetsForSingleMatcher(matcher)
   }
 
   public constructor(options?: PathMatcherOptions) {
@@ -906,5 +901,26 @@ export class PathMatcher<PathTarget = any> {
         return false
       }
     }
+  }
+
+  private _getTargetsForSingleMatcher(matcher: string): GetTargetsResult<PathTarget>[] {
+    if (!this.options.useWildcards && !this.options.useParams) {
+      // Use optimized path for static matching
+      const targetRecords = this._targetsMap.get(matcher)
+      if (!targetRecords) return []
+
+      return targetRecords.map((record) => ({
+        matcher: matcher,
+        target: record.target
+      }))
+    }
+
+    // Advanced mode - filter targets for specific matcher
+    return this._allTargets
+      .filter((record) => record.matcher === matcher)
+      .map((record) => ({
+        matcher: record.matcher,
+        target: record.target
+      }))
   }
 }
