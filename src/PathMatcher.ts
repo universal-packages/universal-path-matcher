@@ -618,7 +618,7 @@ export class PathMatcher<PathTarget = any> {
             continue // Skip this match
           }
 
-          const targetKey = `${targetRecord.matcher}:${JSON.stringify(targetRecord.target)}:${JSON.stringify(params)}`
+          const targetKey = `${targetRecord.matcher}:${this._allTargets.indexOf(targetRecord)}:${JSON.stringify(params)}`
 
           if (!seenTargets.has(targetKey)) {
             seenTargets.add(targetKey)
@@ -741,7 +741,7 @@ export class PathMatcher<PathTarget = any> {
     // Check advanced matchers
     for (const targetRecord of this._allTargets) {
       if (this._doesPatternMatchMatcher(pattern, targetRecord.matcher)) {
-        const targetKey = `${targetRecord.matcher}:${JSON.stringify(targetRecord.target)}:{}`
+        const targetKey = `${targetRecord.matcher}:${this._allTargets.indexOf(targetRecord)}:{}`
 
         if (!seenTargets.has(targetKey)) {
           seenTargets.add(targetKey)

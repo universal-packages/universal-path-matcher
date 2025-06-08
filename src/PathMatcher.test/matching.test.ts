@@ -325,5 +325,25 @@ export async function runMatchingTests() {
     assertEquals(targets.includes('api-v1-users'), true, 'Should include api-v1-users')
   })
 
+  await runTest('Prepend listeners are called first', async () => {
+    const pathMatcher = new PathMatcher<() => any>({ useWildcards: true })
+    const callOrder: string[] = []
+
+    pathMatcher.addTarget('test', () => {
+      callOrder.push('normal')
+    })
+    pathMatcher.prependTarget('test', () => {
+      callOrder.push('prepend')
+    })
+
+    const results = pathMatcher.match('test')
+    for (const result of results) {
+      result.target()
+    }
+
+    assertEquals(callOrder[0], 'prepend', 'prepend listener should be called first')
+    assertEquals(callOrder[1], 'normal', 'normal listener should be called second')
+  })
+
   console.log('\n✅ All Matching tests completed!')
 }
