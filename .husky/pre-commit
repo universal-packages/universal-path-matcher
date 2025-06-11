@@ -1,4 +1,4 @@
-FORMATTABLE_STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx|json)$' || true)
+FORMATTABLE_STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx|json|md)$' || true)
 
 for FILE in $FORMATTABLE_STAGED_FILES; do
     if [ -f "$FILE" ]; then
@@ -8,3 +8,4 @@ for FILE in $FORMATTABLE_STAGED_FILES; do
 done
 
 npm test
+npm run build
