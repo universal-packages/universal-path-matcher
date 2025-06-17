@@ -28,6 +28,7 @@ export interface TargetRecord<PathTarget = any> {
 
 export interface PathTargetResult<PathTarget = any> {
   matcher: string
+  matchedPath: string
   target: PathTarget
   params?: Record<string, string>
 }

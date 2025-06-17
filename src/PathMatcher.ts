@@ -166,11 +166,11 @@ export class PathMatcher<PathTarget = any> {
       const targetRecords = this._targetsMap.get(matcher)
 
       if (!targetRecords) {
-        this._targetsMap.set(matcher, [{ matcher, target, constantResult: { matcher, target } }])
+        this._targetsMap.set(matcher, [{ matcher, target, constantResult: { matcher, matchedPath: matcher, target } }])
         return
       }
 
-      targetRecords.push({ matcher, target, constantResult: { matcher, target } })
+      targetRecords.push({ matcher, target, constantResult: { matcher, matchedPath: matcher, target } })
       return
     }
 
@@ -187,11 +187,11 @@ export class PathMatcher<PathTarget = any> {
       const targetRecords = this._targetsMap.get(matcher)
 
       if (!targetRecords) {
-        this._targetsMap.set(matcher, [{ matcher, target, remainingMatches: 1, constantResult: { matcher, target } }])
+        this._targetsMap.set(matcher, [{ matcher, target, remainingMatches: 1, constantResult: { matcher, matchedPath: matcher, target } }])
         return
       }
 
-      targetRecords.push({ matcher, target, remainingMatches: 1, constantResult: { matcher, target } })
+      targetRecords.push({ matcher, target, remainingMatches: 1, constantResult: { matcher, matchedPath: matcher, target } })
       return
     }
 
@@ -212,11 +212,11 @@ export class PathMatcher<PathTarget = any> {
       const targetRecords = this._targetsMap.get(matcher)
 
       if (!targetRecords) {
-        this._targetsMap.set(matcher, [{ matcher, target, remainingMatches: times, constantResult: { matcher, target } }])
+        this._targetsMap.set(matcher, [{ matcher, target, remainingMatches: times, constantResult: { matcher, matchedPath: matcher, target } }])
         return
       }
 
-      targetRecords.push({ matcher, target, remainingMatches: times, constantResult: { matcher, target } })
+      targetRecords.push({ matcher, target, remainingMatches: times, constantResult: { matcher, matchedPath: matcher, target } })
       return
     }
 
@@ -233,11 +233,11 @@ export class PathMatcher<PathTarget = any> {
       const targetRecords = this._targetsMap.get(matcher)
 
       if (!targetRecords) {
-        this._targetsMap.set(matcher, [{ matcher, target, constantResult: { matcher, target } }])
+        this._targetsMap.set(matcher, [{ matcher, target, constantResult: { matcher, matchedPath: matcher, target } }])
         return
       }
 
-      targetRecords.unshift({ matcher, target, constantResult: { matcher, target } })
+      targetRecords.unshift({ matcher, target, constantResult: { matcher, matchedPath: matcher, target } })
       return
     }
 
@@ -255,11 +255,11 @@ export class PathMatcher<PathTarget = any> {
       const targetRecords = this._targetsMap.get(matcher)
 
       if (!targetRecords) {
-        this._targetsMap.set(matcher, [{ matcher, target, remainingMatches: 1, constantResult: { matcher, target } }])
+        this._targetsMap.set(matcher, [{ matcher, target, remainingMatches: 1, constantResult: { matcher, matchedPath: matcher, target } }])
         return
       }
 
-      targetRecords.unshift({ matcher, target, remainingMatches: 1, constantResult: { matcher, target } })
+      targetRecords.unshift({ matcher, target, remainingMatches: 1, constantResult: { matcher, matchedPath: matcher, target } })
       return
     }
 
@@ -280,11 +280,11 @@ export class PathMatcher<PathTarget = any> {
       const targetRecords = this._targetsMap.get(matcher)
 
       if (!targetRecords) {
-        this._targetsMap.set(matcher, [{ matcher, target, remainingMatches: times, constantResult: { matcher, target } }])
+        this._targetsMap.set(matcher, [{ matcher, target, remainingMatches: times, constantResult: { matcher, matchedPath: matcher, target } }])
         return
       }
 
-      targetRecords.unshift({ matcher, target, remainingMatches: times, constantResult: { matcher, target } })
+      targetRecords.unshift({ matcher, target, remainingMatches: times, constantResult: { matcher, matchedPath: matcher, target } })
       return
     }
 
@@ -418,7 +418,7 @@ export class PathMatcher<PathTarget = any> {
     const seenTargets = new Set<string>() // To avoid duplicates
 
     // Match against trie
-    this._matchInTrie(pathSegments, this._trie, {}, results, prependedResults, seenTargets)
+    this._matchInTrie(pathSegments, this._trie, {}, results, prependedResults, seenTargets, 0, sanitizedPath)
 
     // Handle remaining matches decrementation and removal
     const allResults = [...prependedResults, ...results]
@@ -663,7 +663,8 @@ export class PathMatcher<PathTarget = any> {
     results: PathTargetResult<PathTarget>[],
     prependedResults: PathTargetResult<PathTarget>[],
     seenTargets: Set<string>,
-    segmentIndex: number = 0
+    segmentIndex: number = 0,
+    originalPath: string = ''
   ): void {
     // If we've consumed all path segments
     if (segmentIndex >= pathSegments.length) {
@@ -686,6 +687,7 @@ export class PathMatcher<PathTarget = any> {
 
             const result: PathTargetResult<PathTarget> = {
               matcher: targetRecord.matcher,
+              matchedPath: originalPath,
               target: targetRecord.target,
               params: Object.keys(params).length > 0 ? { ...params } : undefined
             }
@@ -706,28 +708,28 @@ export class PathMatcher<PathTarget = any> {
     // Try static match
     const staticChild = node.staticChildren.get(currentSegment)
     if (staticChild) {
-      this._matchInTrie(pathSegments, staticChild, params, results, prependedResults, seenTargets, segmentIndex + 1)
+      this._matchInTrie(pathSegments, staticChild, params, results, prependedResults, seenTargets, segmentIndex + 1, originalPath)
     }
 
     // Try wildcard match (only matches exactly one segment)
     if (node.wildcardChild) {
-      this._matchInTrie(pathSegments, node.wildcardChild, params, results, prependedResults, seenTargets, segmentIndex + 1)
+      this._matchInTrie(pathSegments, node.wildcardChild, params, results, prependedResults, seenTargets, segmentIndex + 1, originalPath)
     }
 
     // Try globstar match (can match zero or more segments)
     if (node.globstarChild) {
-      this._matchGlobstar(pathSegments, node.globstarChild, params, results, prependedResults, seenTargets, segmentIndex)
+      this._matchGlobstar(pathSegments, node.globstarChild, params, results, prependedResults, seenTargets, segmentIndex, originalPath)
     }
 
     // Try globstar in middle match (must match at least one segment)
     if (node.globstarInMiddleChild) {
-      this._matchGlobstarInMiddle(pathSegments, node.globstarInMiddleChild, params, results, prependedResults, seenTargets, segmentIndex)
+      this._matchGlobstarInMiddle(pathSegments, node.globstarInMiddleChild, params, results, prependedResults, seenTargets, segmentIndex, originalPath)
     }
 
     // Try param match (but not if current segment is a wildcard when wildcards are enabled)
     if (node.paramChild && !(this.options.useWildcards && currentSegment === '*')) {
       const newParams = { ...params, [node.paramChild.paramName]: currentSegment }
-      this._matchInTrie(pathSegments, node.paramChild.node, newParams, results, prependedResults, seenTargets, segmentIndex + 1)
+      this._matchInTrie(pathSegments, node.paramChild.node, newParams, results, prependedResults, seenTargets, segmentIndex + 1, originalPath)
     }
   }
 
@@ -738,15 +740,16 @@ export class PathMatcher<PathTarget = any> {
     results: PathTargetResult<PathTarget>[],
     prependedResults: PathTargetResult<PathTarget>[],
     seenTargets: Set<string>,
-    segmentIndex: number
+    segmentIndex: number,
+    originalPath: string = ''
   ): void {
     // Globstar can match zero or more segments
     // First try matching zero segments (continue with current position)
-    this._matchInTrie(pathSegments, node, params, results, prependedResults, seenTargets, segmentIndex)
+    this._matchInTrie(pathSegments, node, params, results, prependedResults, seenTargets, segmentIndex, originalPath)
 
     // Then try matching one or more segments
     for (let i = segmentIndex + 1; i <= pathSegments.length; i++) {
-      this._matchInTrie(pathSegments, node, params, results, prependedResults, seenTargets, i)
+      this._matchInTrie(pathSegments, node, params, results, prependedResults, seenTargets, i, originalPath)
     }
   }
 
@@ -757,11 +760,12 @@ export class PathMatcher<PathTarget = any> {
     results: PathTargetResult<PathTarget>[],
     prependedResults: PathTargetResult<PathTarget>[],
     seenTargets: Set<string>,
-    segmentIndex: number
+    segmentIndex: number,
+    originalPath: string = ''
   ): void {
     // When ** is in the middle of a pattern (like 1/**/event), it must match at least one segment
     for (let i = segmentIndex + 1; i <= pathSegments.length; i++) {
-      this._matchInTrie(pathSegments, node, params, results, prependedResults, seenTargets, i)
+      this._matchInTrie(pathSegments, node, params, results, prependedResults, seenTargets, i, originalPath)
     }
   }
 
@@ -809,6 +813,7 @@ export class PathMatcher<PathTarget = any> {
 
           const result: PathTargetResult<PathTarget> = {
             matcher: targetRecord.matcher,
+            matchedPath: targetRecord.matcher,
             target: targetRecord.target,
             params: undefined
           }

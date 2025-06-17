@@ -26,7 +26,7 @@ matcher.addTarget('user/profile', 'user-profile-handler')
 matcher.addTarget('admin/settings', 'admin-settings-handler')
 
 const results = matcher.match('user/profile')
-console.log(results) // [{ matcher: 'user/profile', target: 'user-profile-handler' }]
+console.log(results) // [{ matcher: 'user/profile', matchedPath: 'user/profile', target: 'user-profile-handler' }]
 ```
 
 ### Constructor
@@ -310,6 +310,13 @@ match(path: string | string[]): PathTargetResult<PathTarget>[]
 
 Matches a path or array of paths against all registered patterns and returns matching targets. When an array is provided, all targets that match any of the provided paths are returned.
 
+Each result includes:
+
+- **`matcher`**: The pattern that was registered
+- **`matchedPath`**: The actual path that was matched (useful for debugging and logging)
+- **`target`**: The registered target
+- **`params`**: Extracted parameters (when using parameter patterns)
+
 ```ts
 const matcher = new PathMatcher<string>()
 matcher.addTarget('user/profile', 'profile-handler')
@@ -319,7 +326,7 @@ matcher.addTarget('api/data', 'data-handler')
 // Single path matching
 const singleResult = matcher.match('user/profile')
 console.log(singleResult[0])
-// { matcher: 'user/profile', target: 'profile-handler' }
+// { matcher: 'user/profile', matchedPath: 'user/profile', target: 'profile-handler' }
 
 // Multiple paths matching
 const multipleResults = matcher.match(['user/profile', 'user/settings', 'api/data'])
@@ -497,9 +504,13 @@ matcher.addTarget('**', 'global-handler')
 
 // Matching examples
 console.log(matcher.match('api/v1/data')) // Matches 'api/*/data'
+// Result: [{ matcher: 'api/*/data', matchedPath: 'api/v1/data', target: 'api-data-handler' }]
+
 console.log(matcher.match('admin/users/list')) // Matches 'admin/**'
-console.log(matcher.match('app/system/logs')) // Matches '**/logs'
+// Result: [{ matcher: 'admin/**', matchedPath: 'admin/users/list', target: 'admin-handler' }]
+
 console.log(matcher.match('anything')) // Matches '*' and '**'
+// Results show matchedPath: 'anything' for both patterns
 ```
 
 ### Wildcard Rules
@@ -522,7 +533,8 @@ matcher.addTarget('shop/:store/product/:productId/review/:reviewId', 'review-han
 
 // Parameter extraction
 const results = matcher.match('user/123')
-console.log(results[0].params) // { id: '123' }
+console.log(results[0])
+// { matcher: 'user/:id', matchedPath: 'user/123', target: 'user-handler', params: { id: '123' } }
 
 const apiResults = matcher.match('api/v2/users/user456')
 console.log(apiResults[0].params) // { version: 'v2', userId: 'user456' }
@@ -548,7 +560,8 @@ matcher.addTarget('api/:version/**/user/:id/*', 'complex-api-handler')
 
 // Combined matching
 const results = matcher.match('user/123/profile')
-console.log(results[0].params) // { id: '123' }
+console.log(results[0])
+// { matcher: 'user/:id/*', matchedPath: 'user/123/profile', target: 'user-wildcard-handler', params: { id: '123' } }
 
 const namespaceResults = matcher.match('admin/users/user456')
 console.log(namespaceResults[0].params) // { userId: 'user456' }
